@@ -1,0 +1,19 @@
+[package]
+name = "gpkg-to-png"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+geo = "0.28"
+image = "0.25"
+proj = { version = "0.31", features = ["bundled_proj"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+anyhow = "1"
+thiserror = "1"
+hex = "0.4"
+wkb = "0.7"
+
+[dev-dependencies]
+tempfile = "3"
