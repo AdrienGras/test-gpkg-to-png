@@ -112,7 +112,7 @@ L'objectif était de tester la productivité et la pertinence d'une stack de dé
 
 ### 🛠️ Stack de développement utilisée :
 - **Orchestration & Exécution** : [Claude Code](https://claude.ai/code) (l'agent CLI qui a écrit ces lignes).
-- **Intelligence & "Vibes"** : Un mix dynamique via **OpenRouter**, exploitant principalement les modèles **Claude 3.5 Sonnet / 3.7 Sonnet** (Anthropic) et **Gemini 1.5 Pro / 2.0 Flash** (Google).
+- **Intelligence & "Vibes"** : Un mix dynamique via **OpenRouter**, exploitant principalement les modèles **Claude 4.5 Sonnet** (Anthropic) et **Gemini 3 Flash** (Google).
 - **Processus** : Aucun code n'a été écrit à la main. Chaque fonctionnalité, du choix de l'algorithme scanline pour le remplissage à la gestion du parallélisme avec `rayon`, a été proposée, discutée et implémentée par l'IA sous la supervision de l'utilisateur.
 
 ### 📊 Bilan de l'expérience :
