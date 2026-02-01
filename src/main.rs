@@ -2,6 +2,7 @@ mod cli;
 mod error;
 mod gpkg;
 mod math;
+mod render;
 
 use clap::Parser;
 use cli::Args;
