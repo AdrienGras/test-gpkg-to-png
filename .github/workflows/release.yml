@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libstdc++6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Prepare binary
+        run: |
+          mv target/release/gpkg-to-png gpkg-to-png-linux-amd64
+          # Optional: strip binary to reduce size
+          strip gpkg-to-png-linux-amd64
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: gpkg-to-png-linux-amd64
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

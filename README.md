@@ -30,6 +30,8 @@ cargo build --release
 ```
 L'exécutable sera disponible dans `target/release/gpkg-to-png`.
 
+> 💡 **Tip** : Vous pouvez également télécharger les binaires pré-compilés pour Linux dans la section [Releases](https://github.com/AdrienGras/test-gpkg-to-png/releases) de ce dépôt.
+
 ## 🛠️ Utilisation
 
 ```bash
