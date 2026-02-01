@@ -1,4 +1,5 @@
-use geo::{Geometry, MultiPolygon};
+use geo::{Geometry, MapCoords, MultiPolygon};
+use proj::Proj;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool};
 use sqlx::Row;
 use std::path::Path;
@@ -96,6 +97,60 @@ impl GpkgReader {
 
         Ok(row.get("definition"))
     }
+
+    /// Read and reproject geometries to WGS84
+    pub async fn read_geometries_wgs84(&self, layer: &LayerInfo) -> Result<Vec<MultiPolygon<f64>>> {
+        let geometries = self.read_geometries(layer).await?;
+
+        if layer.srs_id == 4326 {
+            return Ok(geometries);
+        }
+
+        let srs_def = self.get_srs_definition(layer.srs_id).await?;
+
+        // Create projection from source CRS to WGS84
+        let proj = Proj::new_known_crs(&srs_def, "EPSG:4326", None).map_err(|e| {
+            GpkgError::ReprojectionFailed(format!(
+                "Could not create projection from SRS {} to WGS84: {}",
+                layer.srs_id, e
+            ))
+        })?;
+
+        let reprojected: Vec<MultiPolygon<f64>> = geometries
+            .into_iter()
+            .filter_map(|mp| reproject_multipolygon(&mp, &proj))
+            .collect();
+
+        Ok(reprojected)
+    }
+}
+
+/// Reproject a MultiPolygon using proj
+fn reproject_multipolygon(mp: &MultiPolygon<f64>, proj: &Proj) -> Option<MultiPolygon<f64>> {
+    let reprojected = mp.map_coords(|coord| match proj.convert((coord.x, coord.y)) {
+        Ok((x, y)) => geo::Coord { x, y },
+        Err(_) => geo::Coord {
+            x: f64::NAN,
+            y: f64::NAN,
+        },
+    });
+
+    // Check if any coordinates failed (became NaN)
+    let has_nan = reprojected.iter().any(|poly| {
+        poly.exterior()
+            .coords()
+            .any(|c| c.x.is_nan() || c.y.is_nan())
+            || poly
+                .interiors()
+                .iter()
+                .any(|ring| ring.coords().any(|c| c.x.is_nan() || c.y.is_nan()))
+    });
+
+    if has_nan {
+        None
+    } else {
+        Some(reprojected)
+    }
 }
 
 /// Parse GeoPackage WKB (with header) to geo Geometry
@@ -150,5 +205,29 @@ mod tests {
         };
         assert_eq!(layer.name, "test_layer");
         assert_eq!(layer.srs_id, 4326);
+    }
+
+    #[test]
+    fn test_reproject_identity() {
+        use geo::{coord, LineString, Polygon};
+
+        // Test that reprojection with identity proj works
+        let poly = Polygon::new(
+            LineString::from(vec![
+                coord! { x: 0.0, y: 0.0 },
+                coord! { x: 1.0, y: 0.0 },
+                coord! { x: 1.0, y: 1.0 },
+                coord! { x: 0.0, y: 1.0 },
+                coord! { x: 0.0, y: 0.0 },
+            ]),
+            vec![],
+        );
+        let mp = MultiPolygon::new(vec![poly]);
+
+        // Create an identity-like projection (WGS84 to WGS84)
+        if let Ok(proj) = Proj::new_known_crs("EPSG:4326", "EPSG:4326", None) {
+            let result = reproject_multipolygon(&mp, &proj);
+            assert!(result.is_some());
+        }
     }
 }
