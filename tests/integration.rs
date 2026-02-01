@@ -13,10 +13,12 @@ fn test_help_flag() {
     assert!(stdout.contains("gpkg-to-png"));
     assert!(stdout.contains("--bbox"));
     assert!(stdout.contains("--resolution"));
+    assert!(stdout.contains("--scale"));
 }
 
 #[test]
-fn test_missing_required_args() {
+fn test_missing_resolution_and_scale() {
+    // Neither --resolution nor --scale is provided
     let output = Command::new("cargo")
         .args(["run", "--", "test.gpkg"])
         .output()
@@ -24,7 +26,30 @@ fn test_missing_required_args() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("--bbox") || stderr.contains("required"));
+    assert!(
+        stderr.contains("--resolution")
+            || stderr.contains("--scale")
+            || stderr.contains("must be provided"),
+        "Expected error about missing resolution/scale, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_mutually_exclusive_resolution_and_scale() {
+    // Both --resolution and --scale are provided
+    let output = Command::new("cargo")
+        .args(["run", "--", "test.gpkg", "--resolution=0.001", "--scale=10"])
+        .output()
+        .expect("Failed to execute command");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("mutually exclusive"),
+        "Expected error about mutually exclusive options, got: {}",
+        stderr
+    );
 }
 
 #[test]

@@ -21,11 +21,17 @@ pub enum GpkgError {
     #[error("Resolution must be positive, got: {0}")]
     InvalidResolution(f64),
 
+    #[error("Scale must be positive, got: {0}")]
+    InvalidScale(f64),
+
+    #[error("Either --resolution or --scale must be provided")]
+    MissingResolutionOrScale,
+
+    #[error("Options --{0} and --{1} are mutually exclusive")]
+    MutuallyExclusiveOptions(String, String),
+
     #[error("Image dimensions too large: {width}x{height} pixels (max: {max})")]
     ImageTooLarge { width: u32, height: u32, max: u32 },
-
-    #[error("Reprojection failed for feature: {0}")]
-    ReprojectionFailed(String),
 
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
