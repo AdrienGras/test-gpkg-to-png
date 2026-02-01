@@ -1,11 +1,13 @@
 mod cli;
 mod error;
+mod gpkg;
 mod math;
 
 use clap::Parser;
 use cli::Args;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
     match args.validate() {
         Ok(config) => {
