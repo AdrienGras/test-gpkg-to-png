@@ -8,17 +8,6 @@
 
 ---
 
-## 🧪 Le Vibe Coding POC
-
-Ce projet est une preuve de concept (POC) réalisée pour tester les limites du **"vibe coding"**. L'intégralité du développement a été orchestrée via **Claude Code**, en exploitant la puissance combinée d'**OpenRouter**, **Claude AI** et **Gemini AI**.
-
-📊 **Quelques chiffres :**
-- ⚙️ **Méthode :** 100% assistée par IA (Coding with vibes).
-- ⏱️ **Temps de développement :** ~2 heures (du design à la documentation complète).
-- 💰 **Coût total :** ~30€ de crédits API.
-
----
-
 ## ✨ Fonctionnalités
 
 - 📦 **Lecture Multi-Couches** : Extrait automatiquement les polygones/multipolygones de vos fichiers `.gpkg`.
@@ -106,4 +95,21 @@ cargo test --test integration -- --ignored # 🔍 Tests d'intégration (requiert
 MIT © [Adrien Gras](https://github.com/AdrienGras)
 
 ---
-*Généré avec ❤️ par Claude Code et le Vibe Coding.*
+
+## 🧪 À propos de ce POC : La démarche "Vibe Coding"
+
+Ce projet n'est pas qu'un simple outil technique, c'est une **preuve de concept** explorant une nouvelle manière de concevoir du logiciel : le **Vibe Coding**.
+
+L'objectif était de tester la productivité et la pertinence d'une stack de développement 100% assistée par intelligence artificielle de bout en bout.
+
+### 🛠️ Stack de développement utilisée :
+- **Orchestration & Exécution** : [Claude Code](https://claude.ai/code) (l'agent CLI qui a écrit ces lignes).
+- **Intelligence & "Vibes"** : Un mix dynamique via **OpenRouter**, exploitant principalement les modèles **Claude 3.5 Sonnet / 3.7 Sonnet** (Anthropic) et **Gemini 1.5 Pro / 2.0 Flash** (Google).
+- **Processus** : Aucun code n'a été écrit à la main. Chaque fonctionnalité, du choix de l'algorithme scanline pour le remplissage à la gestion du parallélisme avec `rayon`, a été proposée, discutée et implémentée par l'IA sous la supervision de l'utilisateur.
+
+### 📊 Bilan de l'expérience :
+- ⏱️ **Temps total** : Environ **2 heures**, incluant la conception, l'implémentation, le débogage et la documentation.
+- 💰 **Coût** : Environ **30€** de tokens API (OpenRouter / Anthropic).
+- ✅ **Résultat** : Un code Rust robuste, typé, performant et entièrement documenté.
+
+*Ce projet démontre qu'avec les bons outils d'IA et une vision claire, on peut transformer une idée en un outil viable en un temps record.* 🚀
