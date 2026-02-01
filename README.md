@@ -40,13 +40,19 @@ gpkg-to-png <INPUT> [OPTIONS]
 
 | Option | Raccourci | Description | Défaut |
 |:-------|:----------|:------------|:-------|
+| `<INPUT>` | | **Argument** : Chemin vers le fichier .gpkg | |
 | `--output-dir` | `-o` | Répertoire de sortie | `.` |
-| `--bbox` | `-b` | Bounding box: `minLon,minLat,maxLon,maxLat` | **Requis** |
-| `--resolution` | `-r` | Taille du pixel en degrés | **Requis** |
-| `--fill` | | Couleur de remplissage RGBA (hex) | `FF000080` |
-| `--stroke` | | Couleur de contour RGB (hex) | `FF0000` |
-| `--stroke-width`| | Épaisseur du contour | `1` |
-| `--layer` | `-l` | Couche spécifique à rendre | Toutes |
+| `--bbox` | `-b` | Bounding box: `minLon,minLat,maxLon,maxLat` | *Auto-détecté si omis* |
+| `--resolution` | `-r` | Taille du pixel en degrés (mutuellement exclusif avec `--scale`) | |
+| `--scale` | `-s` | Échelle en mètres par pixel (mutuellement exclusif avec `--resolution`) | |
+| `--fill` | | Couleur de remplissage RGBA hex (ex: `FF000080`) | `FF000080` |
+| `--stroke` | | Couleur de contour RGB hex (ex: `FF0000`) | `FF0000` |
+| `--stroke-width`| | Épaisseur du contour en pixels | `1` |
+| `--layer` | `-l` | Nom de la couche spécifique à rendre | *Toutes* |
+| `--help` | `-h` | Afficher l'aide | |
+| `--version` | `-V` | Afficher la version | |
+
+> **Note** : Vous devez spécifier soit `--resolution`, soit `--scale`. Si la `bbox` n'est pas fournie, l'outil l'auto-détectera à partir de l'emprise des couches présentes dans le GeoPackage.
 
 ### 💡 Exemples
 
