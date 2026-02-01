@@ -1,68 +1,109 @@
+//! CLI argument parsing and validation.
+
 use clap::Parser;
 use std::path::PathBuf;
 
 use crate::error::{GpkgError, Result};
 use crate::math::Bbox;
 
-/// Convert GeoPackage polygon layers to PNG images
+/// Command line arguments for gpkg-to-png.
 #[derive(Parser, Debug)]
 #[command(name = "gpkg-to-png")]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    /// Path to the .gpkg file
+    /// Path to the .gpkg file.
     pub input: PathBuf,
 
-    /// Output directory
+    /// Output directory.
     #[arg(short, long, default_value = ".")]
     pub output_dir: PathBuf,
 
-    /// Bounding box: "minLon,minLat,maxLon,maxLat"
+    /// Bounding box: "minLon,minLat,maxLon,maxLat" (auto-detected from GPKG if not provided).
     #[arg(short, long)]
-    pub bbox: String,
+    pub bbox: Option<String>,
 
-    /// Pixel size in degrees
+    /// Pixel size in degrees (mutually exclusive with --scale).
     #[arg(short, long)]
-    pub resolution: f64,
+    pub resolution: Option<f64>,
 
-    /// Fill color RGBA hex (e.g., "FF000080")
+    /// Scale in meters per pixel (mutually exclusive with --resolution).
+    #[arg(short, long)]
+    pub scale: Option<f64>,
+
+    /// Fill color RGBA hex (e.g., "FF000080").
     #[arg(long, default_value = "FF000080")]
     pub fill: String,
 
-    /// Stroke color RGB hex (e.g., "FF0000")
+    /// Stroke color RGB hex (e.g., "FF0000").
     #[arg(long, default_value = "FF0000")]
     pub stroke: String,
 
-    /// Stroke width in pixels
+    /// Stroke width in pixels.
     #[arg(long, default_value = "1")]
     pub stroke_width: u32,
 
-    /// Specific layer to render (default: all)
+    /// Specific layer to render (default: all).
     #[arg(short, long)]
     pub layer: Option<String>,
 }
 
-/// Parsed and validated configuration
+/// Fully validated configuration object.
 #[derive(Debug)]
 pub struct Config {
+    /// Path to the input GeoPackage.
     pub input: PathBuf,
+    /// Path to the output directory.
     pub output_dir: PathBuf,
-    pub bbox: Bbox,
-    pub resolution: f64,
+    /// Bounding box (None means auto-detect from GPKG).
+    pub bbox: Option<Bbox>,
+    /// Resolution in degrees per pixel.
+    pub resolution: Option<f64>,
+    /// Scale in meters per pixel.
+    pub scale: Option<f64>,
+    /// Fill color RGBA.
     pub fill: [u8; 4],
+    /// Stroke color RGB.
     pub stroke: [u8; 3],
+    /// Stroke width.
     pub stroke_width: u32,
+    /// Optional layer name filter.
     pub layer: Option<String>,
 }
 
 impl Args {
+    /// Validates arguments and converts them to a structured `Config`.
+    ///
+    /// Checks for mutually exclusive options and parses color hex strings.
     pub fn validate(self) -> Result<Config> {
-        // Validate resolution
-        if self.resolution <= 0.0 {
-            return Err(GpkgError::InvalidResolution(self.resolution));
+        // Validate that at least one of resolution or scale is provided
+        if self.resolution.is_none() && self.scale.is_none() {
+            return Err(GpkgError::MissingResolutionOrScale);
         }
 
-        // Parse bbox
-        let bbox = parse_bbox(&self.bbox)?;
+        // Validate that resolution and scale are mutually exclusive
+        if self.resolution.is_some() && self.scale.is_some() {
+            return Err(GpkgError::MutuallyExclusiveOptions(
+                "resolution".to_string(),
+                "scale".to_string(),
+            ));
+        }
+
+        // Validate resolution if provided
+        if let Some(res) = self.resolution {
+            if res <= 0.0 {
+                return Err(GpkgError::InvalidResolution(res));
+            }
+        }
+
+        // Validate scale if provided
+        if let Some(scale) = self.scale {
+            if scale <= 0.0 {
+                return Err(GpkgError::InvalidScale(scale));
+            }
+        }
+
+        // Parse bbox if provided
+        let bbox = self.bbox.as_ref().map(|s| parse_bbox(s)).transpose()?;
 
         // Parse colors
         let fill = parse_rgba(&self.fill)?;
@@ -73,6 +114,7 @@ impl Args {
             output_dir: self.output_dir,
             bbox,
             resolution: self.resolution,
+            scale: self.scale,
             fill,
             stroke,
             stroke_width: self.stroke_width,
@@ -210,5 +252,90 @@ mod tests {
         // Test equal values (also invalid)
         let err = parse_bbox("-4.5,48.0,-4.5,48.5").unwrap_err();
         assert!(err.to_string().contains("min_lon"));
+    }
+
+    fn create_test_args(resolution: Option<f64>, scale: Option<f64>, bbox: Option<&str>) -> Args {
+        Args {
+            input: PathBuf::from("test.gpkg"),
+            output_dir: PathBuf::from("."),
+            bbox: bbox.map(|s| s.to_string()),
+            resolution,
+            scale,
+            fill: "FF000080".to_string(),
+            stroke: "FF0000".to_string(),
+            stroke_width: 1,
+            layer: None,
+        }
+    }
+
+    #[test]
+    fn test_validate_resolution_only() {
+        let args = create_test_args(Some(0.001), None, Some("-4.5,48.0,-4.0,48.5"));
+        let config = args.validate().unwrap();
+        assert!(config.resolution.is_some());
+        assert!(config.scale.is_none());
+        assert!((config.resolution.unwrap() - 0.001).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_validate_scale_only() {
+        let args = create_test_args(None, Some(10.0), Some("-4.5,48.0,-4.0,48.5"));
+        let config = args.validate().unwrap();
+        assert!(config.resolution.is_none());
+        assert!(config.scale.is_some());
+        assert!((config.scale.unwrap() - 10.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_validate_neither_resolution_nor_scale() {
+        let args = create_test_args(None, None, Some("-4.5,48.0,-4.0,48.5"));
+        let err = args.validate().unwrap_err();
+        assert!(err.to_string().contains("resolution"));
+        assert!(err.to_string().contains("scale"));
+    }
+
+    #[test]
+    fn test_validate_both_resolution_and_scale() {
+        let args = create_test_args(Some(0.001), Some(10.0), Some("-4.5,48.0,-4.0,48.5"));
+        let err = args.validate().unwrap_err();
+        assert!(err.to_string().contains("mutually exclusive"));
+    }
+
+    #[test]
+    fn test_validate_optional_bbox() {
+        let args = create_test_args(Some(0.001), None, None);
+        let config = args.validate().unwrap();
+        assert!(config.bbox.is_none());
+    }
+
+    #[test]
+    fn test_validate_invalid_scale() {
+        let args = create_test_args(None, Some(-10.0), Some("-4.5,48.0,-4.0,48.5"));
+        let err = args.validate().unwrap_err();
+        assert!(err.to_string().contains("Scale must be positive"));
+    }
+
+    #[test]
+    fn test_validate_invalid_resolution() {
+        let args = create_test_args(Some(-0.001), None, Some("-4.5,48.0,-4.0,48.5"));
+        let err = args.validate().unwrap_err();
+        assert!(err.to_string().contains("Resolution must be positive"));
+    }
+
+    #[test]
+    fn test_scale_to_resolution_conversion() {
+        // Test the formula: resolution = scale / (111319.0 * cos(center_lat_radians))
+        // At the equator (0 lat), cos(0) = 1, so resolution = scale / 111319.0
+        // For 10 m/pixel at equator: resolution = 10 / 111319.0 ~= 0.0000898315
+        let scale = 10.0;
+        let center_lat: f64 = 0.0;
+        let resolution = scale / (111319.0 * center_lat.to_radians().cos());
+        assert!((resolution - 0.0000898315).abs() < 0.0000001);
+
+        // At 48 degrees (roughly France), cos(48 deg) ~= 0.6691
+        // resolution = 10 / (111319.0 * 0.6691) ~= 0.0001342
+        let center_lat: f64 = 48.0;
+        let resolution = scale / (111319.0 * center_lat.to_radians().cos());
+        assert!((resolution - 0.0001342).abs() < 0.0001);
     }
 }

@@ -1,5 +1,6 @@
 use geo::{Geometry, MapCoords, MultiPolygon};
 use proj::Proj;
+use rayon::prelude::*;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool};
 use sqlx::Row;
 use std::path::Path;
@@ -98,7 +99,10 @@ impl GpkgReader {
         Ok(row.get("definition"))
     }
 
-    /// Read and reproject geometries to WGS84
+    /// Read and reproject geometries to WGS84.
+    ///
+    /// This method parallelizes the reprojection of geometries using `rayon`.
+    /// Each thread initializes its own `proj` context for thread safety.
     pub async fn read_geometries_wgs84(&self, layer: &LayerInfo) -> Result<Vec<MultiPolygon<f64>>> {
         let geometries = self.read_geometries(layer).await?;
 
@@ -108,24 +112,88 @@ impl GpkgReader {
 
         let srs_def = self.get_srs_definition(layer.srs_id).await?;
 
-        // Create projection from source CRS to WGS84
-        let proj = Proj::new_known_crs(&srs_def, "EPSG:4326", None).map_err(|e| {
-            GpkgError::ReprojectionFailed(format!(
-                "Could not create projection from SRS {} to WGS84: {}",
-                layer.srs_id, e
-            ))
-        })?;
-
+        // Parallelize reprojection
         let reprojected: Vec<MultiPolygon<f64>> = geometries
-            .into_iter()
-            .filter_map(|mp| reproject_multipolygon(&mp, &proj))
+            .into_par_iter()
+            .filter_map(|mp| {
+                // Proj is Send but not Sync, so we must create it per thread.
+                // Using a closure with Proj inside allows each thread to have its own.
+                let proj = Proj::new_known_crs(&srs_def, "EPSG:4326", None).ok()?;
+                reproject_multipolygon(&mp, &proj)
+            })
             .collect();
 
         Ok(reprojected)
     }
+
+    /// Get the bounding box of a layer in source CRS from gpkg_contents
+    pub async fn get_layer_bbox(&self, layer: &LayerInfo) -> Result<Option<(f64, f64, f64, f64)>> {
+        let row = sqlx::query(
+            "SELECT min_x, min_y, max_x, max_y FROM gpkg_contents WHERE table_name = ?",
+        )
+        .bind(&layer.name)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let min_x: Option<f64> = row.get("min_x");
+        let min_y: Option<f64> = row.get("min_y");
+        let max_x: Option<f64> = row.get("max_x");
+        let max_y: Option<f64> = row.get("max_y");
+
+        match (min_x, min_y, max_x, max_y) {
+            (Some(min_x), Some(min_y), Some(max_x), Some(max_y)) => {
+                Ok(Some((min_x, min_y, max_x, max_y)))
+            }
+            _ => Ok(None),
+        }
+    }
 }
 
-/// Reproject a MultiPolygon using proj
+/// Reproject a bbox from source CRS to WGS84.
+///
+/// Returns `None` if the projection fails.
+/// Handles the projection by reprojecting all 4 corners and computing the new bounds.
+pub fn reproject_bbox_to_wgs84(
+    min_x: f64,
+    min_y: f64,
+    max_x: f64,
+    max_y: f64,
+    srs_def: &str,
+) -> Option<(f64, f64, f64, f64)> {
+    let proj = Proj::new_known_crs(srs_def, "EPSG:4326", None).ok()?;
+
+    // Reproject all 4 corners and find the new bounds
+    let corners = [
+        (min_x, min_y),
+        (max_x, min_y),
+        (max_x, max_y),
+        (min_x, max_y),
+    ];
+
+    let mut wgs84_min_lon = f64::MAX;
+    let mut wgs84_min_lat = f64::MAX;
+    let mut wgs84_max_lon = f64::MIN;
+    let mut wgs84_max_lat = f64::MIN;
+
+    for (x, y) in corners {
+        if let Ok((lon, lat)) = proj.convert((x, y)) {
+            wgs84_min_lon = wgs84_min_lon.min(lon);
+            wgs84_min_lat = wgs84_min_lat.min(lat);
+            wgs84_max_lon = wgs84_max_lon.max(lon);
+            wgs84_max_lat = wgs84_max_lat.max(lat);
+        }
+    }
+
+    if wgs84_min_lon == f64::MAX {
+        None
+    } else {
+        Some((wgs84_min_lon, wgs84_min_lat, wgs84_max_lon, wgs84_max_lat))
+    }
+}
+
+/// Reproject a MultiPolygon using proj.
+///
+/// Returns `None` if any coordinate transformation fails (results in NaN).
 fn reproject_multipolygon(mp: &MultiPolygon<f64>, proj: &Proj) -> Option<MultiPolygon<f64>> {
     let reprojected = mp.map_coords(|coord| match proj.convert((coord.x, coord.y)) {
         Ok((x, y)) => geo::Coord { x, y },
@@ -153,7 +221,15 @@ fn reproject_multipolygon(mp: &MultiPolygon<f64>, proj: &Proj) -> Option<MultiPo
     }
 }
 
-/// Parse GeoPackage WKB (with header) to geo Geometry
+/// Parse GeoPackage WKB (with header) to geo Geometry.
+///
+/// GeoPackage WKB format extends ISO WKB with a specific header:
+/// - Magic number: "GP" (2 bytes)
+/// - Version: 1 byte
+/// - Flags: 1 byte (includes envelope type and byte order)
+/// - SRS ID: 4 bytes
+/// - Optional envelope data
+/// - Standard ISO WKB
 fn parse_gpkg_wkb(data: &[u8]) -> Option<Geometry<f64>> {
     // GeoPackage uses a header before standard WKB
     // Header: magic (2 bytes), version (1 byte), flags (1 byte), srs_id (4 bytes)
@@ -229,5 +305,64 @@ mod tests {
             let result = reproject_multipolygon(&mp, &proj);
             assert!(result.is_some());
         }
+    }
+
+    #[test]
+    fn test_reproject_bbox_to_wgs84() {
+        // Test reprojection from WGS84 to WGS84 (should be identity-like)
+        let result = reproject_bbox_to_wgs84(-4.5, 48.0, -4.0, 48.5, "EPSG:4326");
+        assert!(result.is_some());
+        let (min_lon, min_lat, max_lon, max_lat) = result.unwrap();
+        assert!((min_lon - (-4.5)).abs() < 0.001);
+        assert!((min_lat - 48.0).abs() < 0.001);
+        assert!((max_lon - (-4.0)).abs() < 0.001);
+        assert!((max_lat - 48.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_reproject_bbox_from_lambert93() {
+        // Test reprojection from EPSG:2154 (Lambert-93) to WGS84
+        // Using approximate Lambert-93 coordinates for Brittany, France
+        // These coords are approximate - main test is that reprojection works
+        // and returns valid ordered bbox values
+        let result = reproject_bbox_to_wgs84(860000.0, 6250000.0, 880000.0, 6280000.0, "EPSG:2154");
+        assert!(result.is_some());
+        let (min_lon, min_lat, max_lon, max_lat) = result.unwrap();
+        // Check that we got valid values (not NaN/Inf)
+        assert!(!min_lon.is_nan() && !min_lon.is_infinite());
+        assert!(!min_lat.is_nan() && !min_lat.is_infinite());
+        assert!(!max_lon.is_nan() && !max_lon.is_infinite());
+        assert!(!max_lat.is_nan() && !max_lat.is_infinite());
+        // Check ordering
+        assert!(
+            min_lon < max_lon,
+            "min_lon {} should be < max_lon {}",
+            min_lon,
+            max_lon
+        );
+        assert!(
+            min_lat < max_lat,
+            "min_lat {} should be < max_lat {}",
+            min_lat,
+            max_lat
+        );
+        // Check values are in plausible range for France (roughly -10 to 10 lon, 40 to 52 lat)
+        assert!(
+            min_lon > -10.0 && min_lon < 10.0,
+            "min_lon {} should be in France",
+            min_lon
+        );
+        assert!(
+            min_lat > 40.0 && min_lat < 52.0,
+            "min_lat {} should be in France",
+            min_lat
+        );
+    }
+
+    #[test]
+    fn test_reproject_bbox_invalid_crs() {
+        // Test with invalid CRS - should return None
+        let result = reproject_bbox_to_wgs84(0.0, 0.0, 1.0, 1.0, "INVALID:CRS");
+        assert!(result.is_none());
     }
 }

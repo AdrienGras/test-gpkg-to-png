@@ -1,13 +1,20 @@
-/// Bounding box in WGS84 coordinates
+//! Geometric utilities and coordinate transformations.
+
+/// Bounding box in WGS84 coordinates (longitude, latitude).
 #[derive(Debug, Clone, Copy)]
 pub struct Bbox {
+    /// Minimum longitude (degrees).
     pub min_lon: f64,
+    /// Minimum latitude (degrees).
     pub min_lat: f64,
+    /// Maximum longitude (degrees).
     pub max_lon: f64,
+    /// Maximum latitude (degrees).
     pub max_lat: f64,
 }
 
 impl Bbox {
+    /// Creates a new bounding box.
     pub fn new(min_lon: f64, min_lat: f64, max_lon: f64, max_lat: f64) -> Self {
         Self {
             min_lon,
@@ -17,16 +24,18 @@ impl Bbox {
         }
     }
 
+    /// Returns the width of the bbox in degrees.
     pub fn width(&self) -> f64 {
         self.max_lon - self.min_lon
     }
 
+    /// Returns the height of the bbox in degrees.
     pub fn height(&self) -> f64 {
         self.max_lat - self.min_lat
     }
 }
 
-/// Calculate image dimensions from bbox and resolution
+/// Calculate image dimensions (width, height) from bbox and resolution.
 pub fn calculate_dimensions(bbox: &Bbox, resolution: f64) -> (u32, u32) {
     let width = (bbox.width() / resolution).ceil() as u32;
     let height = (bbox.height() / resolution).ceil() as u32;

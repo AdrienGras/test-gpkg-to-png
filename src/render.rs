@@ -1,32 +1,54 @@
-use geo::{BoundingRect, Coord, MultiPolygon};
+//! Raster rendering logic for GeoPackage polygons.
+//!
+//! This module implements a scanline rasterization algorithm for filling polygons
+//! and uses Bresenham's algorithm for stroke rendering. It supports alpha blending
+//! for overlapping geometries.
+
+use geo::{Coord, MultiPolygon};
 use image::{ImageBuffer, Rgba, RgbaImage};
+use rayon::iter::ParallelBridge;
+use rayon::prelude::*;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+pub mod edge;
 
 use crate::error::{GpkgError, Result};
 use crate::math::{calculate_dimensions, world_to_screen, Bbox};
+use edge::{Edge, ScanlineTable};
 
 const MAX_DIMENSION: u32 = 20000;
 
-/// Render configuration
+/// Render configuration for a layer.
 #[derive(Debug, Clone)]
 pub struct RenderConfig {
+    /// Bounding box to render.
     pub bbox: Bbox,
+    /// Resolution in degrees per pixel.
     pub resolution: f64,
+    /// Fill color in RGBA format.
     pub fill: [u8; 4],
+    /// Stroke color in RGB format.
     pub stroke: [u8; 3],
+    /// Stroke width in pixels.
     pub stroke_width: u32,
 }
 
-/// Renderer for MultiPolygon geometries to PNG
+/// Renderer that manages the output image buffer and rendering operations.
+///
+/// Uses an internal `Arc<Mutex<RgbaImage>>` to allow parallel rendering of
+/// different geometries or image bands.
 pub struct Renderer {
     config: RenderConfig,
     width: u32,
     height: u32,
-    image: RgbaImage,
+    image: Arc<Mutex<RgbaImage>>,
 }
 
 impl Renderer {
-    /// Create a new renderer with the given configuration
+    /// Create a new renderer with the given configuration.
+    ///
+    /// Validates that the resulting image dimensions don't exceed `MAX_DIMENSION`.
     pub fn new(config: RenderConfig) -> Result<Self> {
         let (width, height) = calculate_dimensions(&config.bbox, config.resolution);
 
@@ -44,7 +66,7 @@ impl Renderer {
             config,
             width,
             height,
-            image,
+            image: Arc::new(Mutex::new(image)),
         })
     }
 
@@ -53,63 +75,90 @@ impl Renderer {
         (self.width, self.height)
     }
 
-    /// Render a multipolygon onto the image
-    pub fn render_multipolygon(&mut self, mp: &MultiPolygon<f64>) {
-        for polygon in mp.iter() {
-            self.render_polygon_fill(polygon);
+    /// Render a MultiPolygon onto the image.
+    ///
+    /// This uses a scanline fill algorithm:
+    /// 1. Build a Global Edge Table (GET) for all edges of the MultiPolygon.
+    /// 2. Divide the image into horizontal bands for parallel processing.
+    /// 3. For each band, iterate through scanlines using an Active Edge Table (AET).
+    /// 4. Apply the Even-Odd rule to determine which pixels to fill.
+    /// 5. Finally, draw the stroke if `stroke_width > 0`.
+    pub fn render_multipolygon(&self, mp: &MultiPolygon<f64>) {
+        // Build GET (Global Edge Table)
+        let mut scanline_table = ScanlineTable::new(0, self.height);
+        for polygon in mp {
+            scanline_table.extract_from_polygon(
+                polygon,
+                &self.config.bbox,
+                self.config.resolution,
+                self.height,
+            );
         }
 
-        if self.config.stroke_width > 0 {
-            for polygon in mp.iter() {
-                self.render_polygon_stroke(polygon);
+        let num_bands = rayon::current_num_threads().max(1) * 4;
+        let band_height = (self.height as usize + num_bands - 1) / num_bands;
+
+        (0..num_bands).into_par_iter().for_each(|band_idx| {
+            let y_start = (band_idx * band_height) as i32;
+            let y_end = ((band_idx + 1) * band_height).min(self.height as usize) as i32;
+
+            if y_start >= y_end {
+                return;
             }
-        }
-    }
 
-    /// Fill a polygon
-    fn render_polygon_fill(&mut self, polygon: &geo::Polygon<f64>) {
-        // Get bounding box of polygon for optimization
-        let Some(rect) = polygon.bounding_rect() else {
-            return;
-        };
+            let mut active_edge_table: Vec<Edge> = Vec::new();
+            let fill_color = Rgba(self.config.fill);
 
-        // Convert to screen coordinates
-        let (min_x, max_y) = world_to_screen(
-            rect.min().x,
-            rect.min().y,
-            &self.config.bbox,
-            self.config.resolution,
-            self.height,
-        );
-        let (max_x, min_y) = world_to_screen(
-            rect.max().x,
-            rect.max().y,
-            &self.config.bbox,
-            self.config.resolution,
-            self.height,
-        );
+            for y in 0..y_end {
+                // Add new edges from GET
+                if y < self.height as i32 {
+                    if let Some(new_edges) = scanline_table.entries.get(y as usize) {
+                        for edge in new_edges {
+                            active_edge_table.push(edge.clone());
+                        }
+                    }
+                }
 
-        // Clamp to image bounds
-        let start_x = (min_x.floor() as i32).max(0) as u32;
-        let end_x = (max_x.ceil() as i32).min(self.width as i32) as u32;
-        let start_y = (min_y.floor() as i32).max(0) as u32;
-        let end_y = (max_y.ceil() as i32).min(self.height as i32) as u32;
+                // Remove edges where y_max == y
+                active_edge_table.retain(|edge| edge.y_max > y);
 
-        let fill = Rgba(self.config.fill);
+                // For rows in our band, fill pixels
+                if y >= y_start {
+                    // Sort AET by x_current
+                    active_edge_table
+                        .sort_by(|a, b| a.x_current.partial_cmp(&b.x_current).unwrap());
 
-        // Scanline fill
-        for py in start_y..end_y {
-            for px in start_x..end_x {
-                let world = self.screen_to_world(px, py);
-                if point_in_polygon(world, polygon) {
-                    blend_pixel(&mut self.image, px, py, fill);
+                    // Fill intervals (Even-Odd rule)
+                    let mut intersections = active_edge_table.iter().peekable();
+                    if intersections.peek().is_some() {
+                        let mut img = self.image.lock().unwrap();
+                        while let (Some(e1), Some(e2)) = (intersections.next(), intersections.next()) {
+                            let x_start = (e1.x_current.round() as i32).max(0) as u32;
+                            let x_end = (e2.x_current.round() as i32).min(self.width as i32) as u32;
+
+                            for x in x_start..x_end {
+                                blend_pixel(&mut img, x, y as u32, fill_color);
+                            }
+                        }
+                    }
+                }
+
+                // Update x_current for next scanline
+                for edge in &mut active_edge_table {
+                    edge.x_current += edge.inv_slope;
                 }
             }
+        });
+
+        if self.config.stroke_width > 0 {
+            mp.iter().par_bridge().for_each(|polygon| {
+                self.render_polygon_stroke(polygon);
+            });
         }
     }
 
-    /// Draw polygon stroke
-    fn render_polygon_stroke(&mut self, polygon: &geo::Polygon<f64>) {
+    /// Draw the stroke (boundary) of a polygon.
+    fn render_polygon_stroke(&self, polygon: &geo::Polygon<f64>) {
         let stroke = Rgba([
             self.config.stroke[0],
             self.config.stroke[1],
@@ -129,7 +178,7 @@ impl Renderer {
 
     /// Draw a linestring with given color and width
     fn draw_linestring(
-        &mut self,
+        &self,
         coords: impl Iterator<Item = Coord<f64>>,
         color: Rgba<u8>,
         width: u32,
@@ -151,8 +200,11 @@ impl Renderer {
         }
     }
 
-    /// Draw a line segment using Bresenham's algorithm
-    fn draw_line(&mut self, from: (f64, f64), to: (f64, f64), color: Rgba<u8>, width: u32) {
+    /// Draw a line segment using Bresenham's algorithm.
+    ///
+    /// This implementation supports thick lines by drawing a square of pixels
+    /// around each point of the ideal line.
+    fn draw_line(&self, from: (f64, f64), to: (f64, f64), color: Rgba<u8>, width: u32) {
         let (x0, y0) = (from.0 as i32, from.1 as i32);
         let (x1, y1) = (to.0 as i32, to.1 as i32);
 
@@ -174,7 +226,8 @@ impl Renderer {
                     let px = x + wx;
                     let py = y + wy;
                     if px >= 0 && px < self.width as i32 && py >= 0 && py < self.height as i32 {
-                        blend_pixel(&mut self.image, px as u32, py as u32, color);
+                        let mut img = self.image.lock().unwrap();
+                        blend_pixel(&mut img, px as u32, py as u32, color);
                     }
                 }
             }
@@ -195,64 +248,17 @@ impl Renderer {
         }
     }
 
-    /// Convert screen coordinates back to world coordinates
-    fn screen_to_world(&self, px: u32, py: u32) -> Coord<f64> {
-        let lon = self.config.bbox.min_lon + (px as f64 + 0.5) * self.config.resolution;
-        let lat = self.config.bbox.max_lat - (py as f64 + 0.5) * self.config.resolution;
-        Coord { x: lon, y: lat }
-    }
-
     /// Save the image to a PNG file
     pub fn save(&self, path: &Path) -> Result<()> {
-        self.image.save(path)?;
+        let img = self.image.lock().unwrap();
+        img.save(path)?;
         Ok(())
     }
 }
 
-/// Check if a point is inside a polygon using ray casting
-fn point_in_polygon(point: Coord<f64>, polygon: &geo::Polygon<f64>) -> bool {
-    let mut inside = point_in_ring(point, polygon.exterior());
-
-    // Check holes - if inside a hole, we're outside the polygon
-    for interior in polygon.interiors() {
-        if point_in_ring(point, interior) {
-            inside = !inside;
-        }
-    }
-
-    inside
-}
-
-/// Ray casting algorithm for a single ring
-fn point_in_ring(point: Coord<f64>, ring: &geo::LineString<f64>) -> bool {
-    let coords: Vec<_> = ring.coords().collect();
-    let n = coords.len();
-    if n < 3 {
-        return false;
-    }
-
-    let mut inside = false;
-    let mut j = n - 1;
-
-    for i in 0..n {
-        let xi = coords[i].x;
-        let yi = coords[i].y;
-        let xj = coords[j].x;
-        let yj = coords[j].y;
-
-        if ((yi > point.y) != (yj > point.y))
-            && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)
-        {
-            inside = !inside;
-        }
-
-        j = i;
-    }
-
-    inside
-}
-
-/// Blend a pixel with alpha compositing
+/// Blend a pixel with alpha compositing (Porter-Duff 'Over' operator).
+///
+/// This performs standard alpha blending of the `src` color over the `dst` color.
 fn blend_pixel(image: &mut RgbaImage, x: u32, y: u32, color: Rgba<u8>) {
     let dst = image.get_pixel(x, y);
     let src_a = color.0[3] as f32 / 255.0;
@@ -314,48 +320,6 @@ mod tests {
     }
 
     #[test]
-    fn test_point_in_polygon() {
-        let polygon = Polygon::new(
-            LineString::from(vec![
-                coord! { x: 0.0, y: 0.0 },
-                coord! { x: 10.0, y: 0.0 },
-                coord! { x: 10.0, y: 10.0 },
-                coord! { x: 0.0, y: 10.0 },
-                coord! { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        );
-
-        assert!(point_in_polygon(coord! { x: 5.0, y: 5.0 }, &polygon));
-        assert!(!point_in_polygon(coord! { x: -1.0, y: 5.0 }, &polygon));
-        assert!(!point_in_polygon(coord! { x: 15.0, y: 5.0 }, &polygon));
-    }
-
-    #[test]
-    fn test_point_in_polygon_with_hole() {
-        let exterior = LineString::from(vec![
-            coord! { x: 0.0, y: 0.0 },
-            coord! { x: 10.0, y: 0.0 },
-            coord! { x: 10.0, y: 10.0 },
-            coord! { x: 0.0, y: 10.0 },
-            coord! { x: 0.0, y: 0.0 },
-        ]);
-        let hole = LineString::from(vec![
-            coord! { x: 3.0, y: 3.0 },
-            coord! { x: 7.0, y: 3.0 },
-            coord! { x: 7.0, y: 7.0 },
-            coord! { x: 3.0, y: 7.0 },
-            coord! { x: 3.0, y: 3.0 },
-        ]);
-        let polygon = Polygon::new(exterior, vec![hole]);
-
-        // Inside the polygon but outside the hole
-        assert!(point_in_polygon(coord! { x: 1.0, y: 1.0 }, &polygon));
-        // Inside the hole
-        assert!(!point_in_polygon(coord! { x: 5.0, y: 5.0 }, &polygon));
-    }
-
-    #[test]
     fn test_render_simple_polygon() {
         let config = RenderConfig {
             bbox: Bbox::new(0.0, 0.0, 10.0, 10.0),
@@ -364,7 +328,7 @@ mod tests {
             stroke: [0, 0, 0],
             stroke_width: 0,
         };
-        let mut renderer = Renderer::new(config).unwrap();
+        let renderer = Renderer::new(config).unwrap();
 
         let polygon = Polygon::new(
             LineString::from(vec![
@@ -381,11 +345,12 @@ mod tests {
         renderer.render_multipolygon(&mp);
 
         // Check center pixel is filled
-        let center = renderer.image.get_pixel(5, 5);
+        let img = renderer.image.lock().unwrap();
+        let center = img.get_pixel(5, 5);
         assert_eq!(center.0, [255, 0, 0, 255]);
 
         // Check corner pixel is transparent
-        let corner = renderer.image.get_pixel(0, 0);
+        let corner = img.get_pixel(0, 0);
         assert_eq!(corner.0, [0, 0, 0, 0]);
     }
 }
