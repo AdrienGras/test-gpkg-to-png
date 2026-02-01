@@ -28,7 +28,7 @@ impl GpkgReader {
         }
 
         let options = SqliteConnectOptions::from_str(&format!("sqlite:{}", path.display()))
-            .map_err(|e| GpkgError::Database(e))?
+            .map_err(GpkgError::Database)?
             .read_only(true);
 
         let pool = SqlitePool::connect_with(options)

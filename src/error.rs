@@ -5,6 +5,7 @@ pub enum GpkgError {
     #[error("File not found: {0}")]
     FileNotFound(String),
 
+    #[allow(dead_code)]
     #[error("No polygon layers found in the GeoPackage")]
     NoPolygonLayers,
 
