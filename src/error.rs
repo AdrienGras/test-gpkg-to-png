@@ -51,6 +51,9 @@ mod tests {
     #[test]
     fn test_layer_not_found_display() {
         let err = GpkgError::LayerNotFound("foo".to_string(), "bar, baz".to_string());
-        assert_eq!(err.to_string(), "Layer 'foo' not found. Available layers: bar, baz");
+        assert_eq!(
+            err.to_string(),
+            "Layer 'foo' not found. Available layers: bar, baz"
+        );
     }
 }
