@@ -152,15 +152,6 @@ impl Logger {
         }
     }
 
-    /// Log a success message (displayed in quiet mode and above).
-    pub fn success(&self, msg: &str) {
-        match self.level {
-            VerbosityLevel::Quiet => {}
-            VerbosityLevel::Normal => println!("{}", msg),
-            VerbosityLevel::Verbose => self.log_with_level("INFO", msg),
-        }
-    }
-
     /// Write a message directly to stdout without newline (for progress bars).
     /// Only writes in normal mode.
     #[allow(dead_code)]
@@ -186,11 +177,6 @@ pub fn warn(msg: &str) {
 /// Output a file path.
 pub fn output(path: &str) {
     Logger::instance().output(path);
-}
-
-/// Log a success message (displayed in quiet mode and above).
-pub fn success(msg: &str) {
-    Logger::instance().success(msg);
 }
 
 /// Log an info message (displayed in normal mode and above).
