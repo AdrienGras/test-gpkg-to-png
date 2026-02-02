@@ -468,3 +468,33 @@ let colors_enabled = !no_color
 ---
 
 *Last updated: 2026-02-02 after verbosity system refactor*
+
+## CI/CD
+
+### Release Workflow
+
+**Trigger:** Git tags matching `v*` (e.g., `v1.2.3`)
+
+**Platforms Built:**
+- Linux AMD64 (x86_64-unknown-linux-gnu)
+- Linux ARM64 (aarch64-unknown-linux-gnu)
+- macOS Intel (x86_64-apple-darwin)
+- macOS Apple Silicon (aarch64-apple-darwin)
+- Windows AMD64 (x86_64-pc-windows-msvc)
+
+**Workflow:**
+1. Five parallel build jobs (one per platform)
+2. Each job builds release binary and uploads artifact
+3. Release job waits for all builds, creates GitHub release
+4. Release includes all binaries + checksums.txt
+
+**Manual Testing:**
+```bash
+# Create test tag
+git tag v0.0.0-test
+git push origin v0.0.0-test
+
+# Wait for CI, then delete test tag and release
+git tag -d v0.0.0-test
+git push origin :refs/tags/v0.0.0-test
+```
