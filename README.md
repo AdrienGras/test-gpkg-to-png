@@ -4,16 +4,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blue.svg)](https://claude.ai/code)
 
-> Un outil CLI ultra-rapide en Rust pour transformer vos fichiers GeoPackage en superbes overlays PNG transparents. 🚀
+> Un outil CLI ultra-rapide en Rust pour transformer vos fichiers GeoPackage et GeoJSON en superbes overlays PNG transparents. 🚀
 
 ---
 
 ## ✨ Fonctionnalités
 
-- 📦 **Lecture Multi-Couches** : Extrait automatiquement les polygones/multipolygones de vos fichiers `.gpkg`.
-- 🌍 **Reprojection à la volée** : Conversion automatique vers WGS84 (EPSG:4326) avec `proj`.
+- 📦 **Formats Multiples** : Supporte les fichiers GeoPackage (`.gpkg`) et GeoJSON (`.geojson`).
+- 📚 **Lecture Multi-Couches** : Extrait automatiquement les polygones/multipolygones (GPKG) ou géométries (GeoJSON).
+- 🌍 **Reprojection à la volée** : Conversion automatique vers WGS84 (EPSG:4326) avec `proj` pour les GPKG.
 - 🎨 **Stylisation Flexible** : Couleurs de remplissage (RGBA) et de contour (RGB) entièrement configurables.
-- 📐 **Haute Précision** : Résolution personnalisable en degrés par pixel.
+- 📐 **Haute Précision** : Résolution personnalisable en degrés par pixel ou échelle en mètres par pixel.
 - 🏎️ **Performance Rust** : Rendu parallélisé pour une vitesse d'exécution optimale.
 
 ## 🚀 Installation
@@ -42,7 +43,8 @@ gpkg-to-png <INPUT> [OPTIONS]
 
 | Option | Raccourci | Description | Défaut |
 |:-------|:----------|:------------|:-------|
-| `<INPUT>` | | **Argument** : Chemin vers le fichier .gpkg | |
+| `<INPUT>` | | **Argument** : Chemin vers le fichier `.gpkg` ou `.geojson` | |
+| `--format` | `-f` | Format d'entrée: `gpkg` ou `geojson` | **Requis** |
 | `--output-dir` | `-o` | Répertoire de sortie | `.` |
 | `--bbox` | `-b` | Bounding box: `minLon,minLat,maxLon,maxLat` | *Auto-détecté si omis* |
 | `--resolution` | `-r` | Taille du pixel en degrés (mutuellement exclusif avec `--scale`) | |
@@ -50,17 +52,19 @@ gpkg-to-png <INPUT> [OPTIONS]
 | `--fill` | | Couleur de remplissage RGBA hex (ex: `FF000080`) | `FF000080` |
 | `--stroke` | | Couleur de contour RGB hex (ex: `FF0000`) | `FF0000` |
 | `--stroke-width`| | Épaisseur du contour en pixels | `1` |
-| `--layer` | `-l` | Nom de la couche spécifique à rendre | *Toutes* |
+| `--layer` | `-l` | Nom de la couche spécifique à rendre (GPKG uniquement) | *Toutes* |
+| `--output-name` | | Nom du fichier PNG de sortie (GeoJSON uniquement) | *Nom du fichier d'entrée* |
 | `--help` | `-h` | Afficher l'aide | |
 | `--version` | `-V` | Afficher la version | |
 
-> **Note** : Vous devez spécifier soit `--resolution`, soit `--scale`. Si la `bbox` n'est pas fournie, l'outil l'auto-détectera à partir de l'emprise des couches présentes dans le GeoPackage.
+> **Note** : Vous devez spécifier soit `--resolution`, soit `--scale`. Si la `bbox` n'est pas fournie, l'outil l'auto-détectera à partir de l'emprise des données.
 
 ### 💡 Exemples
 
-**Rendu avec couleurs personnalisées :**
+**Rendu d'un GeoPackage avec couleurs personnalisées :**
 ```bash
 gpkg-to-png zones.gpkg \
+  -f gpkg \
   --bbox "-4.5,48.0,-4.0,48.5" \
   --resolution 0.0001 \
   --fill "00FF0080" \
@@ -69,14 +73,35 @@ gpkg-to-png zones.gpkg \
   -o ./output/
 ```
 
+**Rendu d'un GeoJSON avec résolution automatique :**
+```bash
+gpkg-to-png data.geojson \
+  -f geojson \
+  --scale 10 \
+  --output-name "mon-overlay" \
+  -o ./output/
+```
+
+**Rendu d'une couche spécifique dans un GPKG :**
+```bash
+gpkg-to-png zones.gpkg \
+  -f gpkg \
+  --layer "parcelles" \
+  --resolution 0.0001 \
+  -o ./output/
+```
+
 ## 🏗️ Architecture du projet
 
 ```text
 src/
-├── main.rs       // 🏗️ Point d'entrée & pipeline async
+├── main.rs       // 🏗️ Point d'entrée & dispatch par format
 ├── cli.rs        // ⌨️ Parsing des arguments avec clap
 ├── gpkg.rs       // 📂 Lecture GeoPackage & reprojection
+├── geojson.rs    // 🌐 Lecture GeoJSON (WGS84)
 ├── render.rs     // 🎨 Algorithmes de rendu (Scanline/Bresenham)
+├── render/
+│   └── edge.rs   // 📊 Gestion des tables de scanline
 ├── math.rs       // 📐 Transformations de coordonnées
 └── error.rs      // 🚨 Gestion d'erreurs robuste
 ```
@@ -86,14 +111,16 @@ src/
 Le projet utilise les meilleurs outils de l'écosystème Rust :
 - `sqlx` & `tokio` pour l'accès aux données asynchrone.
 - `geo` & `proj` pour la manipulation géospatiale.
+- `geojson` pour le parsing GeoJSON.
 - `image` pour le rendu raster haute performance.
 - `rayon` pour le parallélisme massif.
 
 ## 🧪 Tests
 
 ```bash
-cargo test                 # ✅ Tests unitaires
-cargo test --test integration -- --ignored # 🔍 Tests d'intégration (requiert un .gpkg)
+cargo test                 # ✅ Tests unitaires (48 tests)
+cargo test --test integration -- --ignored # 🔍 Tests d'intégration GPKG
+cargo test --test geojson_integration -- --ignored # 🌐 Tests d'intégration GeoJSON
 ```
 
 ---
