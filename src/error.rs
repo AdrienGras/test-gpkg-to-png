@@ -33,6 +33,15 @@ pub enum GpkgError {
     #[error("Image dimensions too large: {width}x{height} pixels (max: {max})")]
     ImageTooLarge { width: u32, height: u32, max: u32 },
 
+    #[error("Failed to parse GeoJSON: {0}")]
+    GeojsonParseError(String),
+
+    #[error("No polygon geometries found in GeoJSON file")]
+    EmptyGeojson,
+
+    #[error("Invalid format option: {0}")]
+    InvalidFormatOption(String),
+
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
@@ -62,5 +71,23 @@ mod tests {
             err.to_string(),
             "Layer 'foo' not found. Available layers: bar, baz"
         );
+    }
+
+    #[test]
+    fn test_geojson_parse_error_display() {
+        let err = GpkgError::GeojsonParseError("invalid JSON".to_string());
+        assert_eq!(err.to_string(), "Failed to parse GeoJSON: invalid JSON");
+    }
+
+    #[test]
+    fn test_empty_geojson_display() {
+        let err = GpkgError::EmptyGeojson;
+        assert_eq!(err.to_string(), "No polygon geometries found in GeoJSON file");
+    }
+
+    #[test]
+    fn test_invalid_format_option_display() {
+        let err = GpkgError::InvalidFormatOption("--layer cannot be used with geojson format".to_string());
+        assert_eq!(err.to_string(), "Invalid format option: --layer cannot be used with geojson format");
     }
 }
