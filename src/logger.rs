@@ -1,31 +1,36 @@
 //! Logging and verbosity control for the application.
 //!
 //! Provides a global logger with three verbosity levels:
-//! - Quiet: Only errors and final results
-//! - Normal: Progress bars and essential info (default)
-//! - Verbose: Everything including debug details
+//! - Quiet: Only file paths output
+//! - Normal: Progress messages without prefixes (default)
+//! - Verbose: Timestamped colored logs with details
 
 use std::io::Write;
 use std::sync::OnceLock;
+use std::time::Instant;
 
 /// Verbosity level for controlling output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerbosityLevel {
-    /// Only errors and final results
+    /// Only file paths output
     Quiet,
-    /// Progress bars and essential info (default)
+    /// Progress messages without prefixes (default)
     Normal,
-    /// Everything including debug details
+    /// Timestamped colored logs with details
     Verbose,
 }
 
 /// Global logger instance.
 static LOGGER: OnceLock<Logger> = OnceLock::new();
 
+/// Global start time for elapsed calculations.
+static START_TIME: OnceLock<Instant> = OnceLock::new();
+
 /// Thread-safe logger for controlling application output.
 #[derive(Debug)]
 pub struct Logger {
     level: VerbosityLevel,
+    colors_enabled: bool,
 }
 
 impl Logger {
@@ -33,9 +38,14 @@ impl Logger {
     ///
     /// # Panics
     /// Panics if called more than once.
-    pub fn init(level: VerbosityLevel) {
+    pub fn init(level: VerbosityLevel, no_color: bool) {
+        let colors_enabled = !no_color
+            && std::env::var("NO_COLOR").is_err()
+            && atty::is(atty::Stream::Stdout);
+
+        START_TIME.set(Instant::now()).ok();
         LOGGER
-            .set(Logger { level })
+            .set(Logger { level, colors_enabled })
             .expect("Logger already initialized");
     }
 
@@ -47,11 +57,12 @@ impl Logger {
         LOGGER.get().expect("Logger not initialized")
     }
 
-    /// Check if the current level is at least the given level.
-    fn is_at_least(&self, level: VerbosityLevel) -> bool {
-        let current = self.level as i32;
-        let required = level as i32;
-        current >= required
+    /// Get elapsed time since logger init.
+    fn elapsed(&self) -> f64 {
+        START_TIME
+            .get()
+            .map(|t| t.elapsed().as_secs_f64())
+            .unwrap_or(0.0)
     }
 
     /// Returns true if verbose mode is enabled.
@@ -70,37 +81,91 @@ impl Logger {
         self.level
     }
 
-    /// Log an error message (always displayed).
-    pub fn error(&self, msg: &str) {
-        eprintln!("Error: {}", msg);
+    /// Log with level prefix and timestamp (verbose mode).
+    fn log_with_level(&self, level: &str, msg: &str) {
+        let elapsed = self.elapsed();
+        if self.colors_enabled {
+            let level_color = match level {
+                "ERROR" => "\x1b[31m",
+                "WARN" => "\x1b[33m",
+                "INFO" => "\x1b[34m",
+                "DEBUG" => "\x1b[90m",
+                _ => "",
+            };
+            println!(
+                "\x1b[90m[{:.2}s]\x1b[0m {}[{}]\x1b[0m {}",
+                elapsed, level_color, level, msg
+            );
+        } else {
+            println!("[{:.2}s] [{}] {}", elapsed, level, msg);
+        }
     }
 
-    /// Log a success message (displayed in quiet mode and above).
-    pub fn success(&self, msg: &str) {
-        if self.is_at_least(VerbosityLevel::Quiet) {
-            println!("{}", msg);
+    /// Log an error message (always displayed).
+    pub fn error(&self, msg: &str) {
+        if self.level == VerbosityLevel::Verbose {
+            let elapsed = self.elapsed();
+            if self.colors_enabled {
+                eprintln!(
+                    "\x1b[90m[{:.2}s]\x1b[0m \x1b[31m[ERROR]\x1b[0m {}",
+                    elapsed, msg
+                );
+            } else {
+                eprintln!("[{:.2}s] [ERROR] {}", elapsed, msg);
+            }
+        } else {
+            eprintln!("Error: {}", msg);
+        }
+    }
+
+    /// Log a warning message (normal and verbose modes).
+    pub fn warn(&self, msg: &str) {
+        match self.level {
+            VerbosityLevel::Quiet => {}
+            VerbosityLevel::Normal => println!("{}", msg),
+            VerbosityLevel::Verbose => self.log_with_level("WARN", msg),
+        }
+    }
+
+    /// Output a file path (quiet: just path, normal: message, verbose: with prefix).
+    pub fn output(&self, path: &str) {
+        match self.level {
+            VerbosityLevel::Quiet => println!("{}", path),
+            VerbosityLevel::Normal => println!("Saved: {}", path),
+            VerbosityLevel::Verbose => self.log_with_level("INFO", &format!("Saved: {}", path)),
         }
     }
 
     /// Log an info message (displayed in normal mode and above).
     pub fn info(&self, msg: &str) {
-        if self.is_at_least(VerbosityLevel::Normal) {
-            println!("{}", msg);
+        match self.level {
+            VerbosityLevel::Quiet => {}
+            VerbosityLevel::Normal => println!("{}", msg),
+            VerbosityLevel::Verbose => self.log_with_level("INFO", msg),
         }
     }
 
     /// Log a debug message (displayed only in verbose mode).
     pub fn debug(&self, msg: &str) {
-        if self.is_at_least(VerbosityLevel::Verbose) {
-            eprintln!("[DEBUG] {}", msg);
+        if self.level == VerbosityLevel::Verbose {
+            self.log_with_level("DEBUG", msg);
+        }
+    }
+
+    /// Log a success message (displayed in quiet mode and above).
+    pub fn success(&self, msg: &str) {
+        match self.level {
+            VerbosityLevel::Quiet => {}
+            VerbosityLevel::Normal => println!("{}", msg),
+            VerbosityLevel::Verbose => self.log_with_level("INFO", msg),
         }
     }
 
     /// Write a message directly to stdout without newline (for progress bars).
-    /// Only writes in normal mode and above.
+    /// Only writes in normal mode.
     #[allow(dead_code)]
     pub fn write(&self, msg: &str) {
-        if self.is_at_least(VerbosityLevel::Normal) {
+        if self.level == VerbosityLevel::Normal {
             print!("{}", msg);
             std::io::stdout().flush().ok();
         }
@@ -111,6 +176,16 @@ impl Logger {
 #[allow(dead_code)]
 pub fn error(msg: &str) {
     Logger::instance().error(msg);
+}
+
+/// Log a warning message (normal and verbose modes).
+pub fn warn(msg: &str) {
+    Logger::instance().warn(msg);
+}
+
+/// Output a file path.
+pub fn output(path: &str) {
+    Logger::instance().output(path);
 }
 
 /// Log a success message (displayed in quiet mode and above).
@@ -129,7 +204,6 @@ pub fn debug(msg: &str) {
 }
 
 /// Returns true if verbose mode is enabled.
-#[allow(dead_code)]
 pub fn is_verbose() -> bool {
     Logger::instance().is_verbose()
 }
@@ -144,13 +218,8 @@ pub fn is_quiet() -> bool {
 mod tests {
     use super::*;
 
-    fn reset_logger() {
-        // Note: In tests, we can't actually reset OnceLock, so we test directly on Logger instances
-    }
-
     #[test]
     fn test_verbosity_level_ordering() {
-        // Ensure the enum values are ordered correctly for comparison
         assert!((VerbosityLevel::Quiet as i32) < (VerbosityLevel::Normal as i32));
         assert!((VerbosityLevel::Normal as i32) < (VerbosityLevel::Verbose as i32));
     }
@@ -159,12 +228,15 @@ mod tests {
     fn test_logger_is_verbose() {
         let quiet_logger = Logger {
             level: VerbosityLevel::Quiet,
+            colors_enabled: false,
         };
         let normal_logger = Logger {
             level: VerbosityLevel::Normal,
+            colors_enabled: false,
         };
         let verbose_logger = Logger {
             level: VerbosityLevel::Verbose,
+            colors_enabled: false,
         };
 
         assert!(!quiet_logger.is_verbose());
@@ -176,12 +248,15 @@ mod tests {
     fn test_logger_is_quiet() {
         let quiet_logger = Logger {
             level: VerbosityLevel::Quiet,
+            colors_enabled: false,
         };
         let normal_logger = Logger {
             level: VerbosityLevel::Normal,
+            colors_enabled: false,
         };
         let verbose_logger = Logger {
             level: VerbosityLevel::Verbose,
+            colors_enabled: false,
         };
 
         assert!(quiet_logger.is_quiet());
@@ -193,36 +268,20 @@ mod tests {
     fn test_logger_level() {
         let quiet_logger = Logger {
             level: VerbosityLevel::Quiet,
+            colors_enabled: false,
         };
 
         assert_eq!(quiet_logger.level(), VerbosityLevel::Quiet);
     }
 
     #[test]
-    fn test_is_at_least() {
-        let quiet_logger = Logger {
-            level: VerbosityLevel::Quiet,
-        };
-        let normal_logger = Logger {
-            level: VerbosityLevel::Normal,
-        };
-        let verbose_logger = Logger {
+    fn test_elapsed_returns_value() {
+        let logger = Logger {
             level: VerbosityLevel::Verbose,
+            colors_enabled: false,
         };
-
-        // Quiet logger: only at least Quiet
-        assert!(quiet_logger.is_at_least(VerbosityLevel::Quiet));
-        assert!(!quiet_logger.is_at_least(VerbosityLevel::Normal));
-        assert!(!quiet_logger.is_at_least(VerbosityLevel::Verbose));
-
-        // Normal logger: at least Quiet and Normal
-        assert!(normal_logger.is_at_least(VerbosityLevel::Quiet));
-        assert!(normal_logger.is_at_least(VerbosityLevel::Normal));
-        assert!(!normal_logger.is_at_least(VerbosityLevel::Verbose));
-
-        // Verbose logger: at least all levels
-        assert!(verbose_logger.is_at_least(VerbosityLevel::Quiet));
-        assert!(verbose_logger.is_at_least(VerbosityLevel::Normal));
-        assert!(verbose_logger.is_at_least(VerbosityLevel::Verbose));
+        // Without START_TIME set, elapsed returns 0.0
+        let elapsed = logger.elapsed();
+        assert!(elapsed >= 0.0);
     }
 }
