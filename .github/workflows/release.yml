@@ -5,44 +5,222 @@ on:
     tags:
       - 'v*'
 
-jobs:
-  build-and-release:
-    name: Build and Release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+env:
+  CARGO_TERM_COLOR: always
 
+jobs:
+  build-linux-amd64:
+    name: Build Linux AMD64
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake clang libstdc++6
+          sudo apt-get install -y cmake clang libsqlite3-dev pkg-config
 
-      - name: Set up Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --lib
 
       - name: Build release
         run: cargo build --release
 
       - name: Prepare binary
         run: |
-          mv target/release/gpkg-to-png gpkg-to-png-linux-amd64
-          # Optional: strip binary to reduce size
-          strip gpkg-to-png-linux-amd64
+          cp target/release/gpkg-to-png gpkg-to-png-${{ github.ref_name }}-linux-amd64
+          strip gpkg-to-png-${{ github.ref_name }}-linux-amd64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64
+          path: gpkg-to-png-${{ github.ref_name }}-linux-amd64
+
+  build-linux-arm64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libsqlite3-dev pkg-config gcc-aarch64-linux-gnu
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Configure cross-compilation
+        run: |
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Build release
+        run: cargo build --release --target aarch64-unknown-linux-gnu
+
+      - name: Prepare binary
+        run: |
+          cp target/aarch64-unknown-linux-gnu/release/gpkg-to-png gpkg-to-png-${{ github.ref_name }}-linux-arm64
+          aarch64-linux-gnu-strip gpkg-to-png-${{ github.ref_name }}-linux-arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
+          path: gpkg-to-png-${{ github.ref_name }}-linux-arm64
+
+  build-macos-amd64:
+    name: Build macOS AMD64
+    runs-on: macos-13
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake proj
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --lib
+
+      - name: Build release
+        run: cargo build --release
+        env:
+          PKG_CONFIG_PATH: /usr/local/opt/proj/lib/pkgconfig
+
+      - name: Prepare binary
+        run: |
+          cp target/release/gpkg-to-png gpkg-to-png-${{ github.ref_name }}-macos-amd64
+          strip gpkg-to-png-${{ github.ref_name }}-macos-amd64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-amd64
+          path: gpkg-to-png-${{ github.ref_name }}-macos-amd64
+
+  build-macos-arm64:
+    name: Build macOS ARM64
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake proj
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --lib
+
+      - name: Build release
+        run: cargo build --release
+        env:
+          PKG_CONFIG_PATH: /opt/homebrew/opt/proj/lib/pkgconfig
+
+      - name: Prepare binary
+        run: |
+          cp target/release/gpkg-to-png gpkg-to-png-${{ github.ref_name }}-macos-arm64
+          strip gpkg-to-png-${{ github.ref_name }}-macos-arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: gpkg-to-png-${{ github.ref_name }}-macos-arm64
+
+  build-windows-amd64:
+    name: Build Windows AMD64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 'a42af01b72c28a8e1d7b48107b33e4f286a55bc6'
+
+      - name: Install dependencies
+        run: |
+          vcpkg install proj:x64-windows-static-md sqlite3:x64-windows-static-md
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+        env:
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+          VCPKGRS_DYNAMIC: 1
+
+      - name: Prepare binary
+        run: |
+          Copy-Item target\release\gpkg-to-png.exe gpkg-to-png-${{ github.ref_name }}-windows-amd64.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64
+          path: gpkg-to-png-${{ github.ref_name }}-windows-amd64.exe
+
+  release:
+    name: Create Release
+    needs: [build-linux-amd64, build-linux-arm64, build-macos-amd64, build-macos-arm64, build-windows-amd64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          for dir in */; do
+            mv "${dir}"* .
+            rmdir "${dir}"
+          done
+          sha256sum gpkg-to-png-* > checksums.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: gpkg-to-png-linux-amd64
+          files: |
+            artifacts/gpkg-to-png-*
+            artifacts/checksums.txt
           draft: false
           prerelease: false
           generate_release_notes: true
