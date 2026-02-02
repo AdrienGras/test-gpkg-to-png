@@ -41,21 +41,21 @@ gpkg-to-png <INPUT> [OPTIONS]
 
 ### ⚙️ Options principales
 
-| Option | Raccourci | Description | Défaut |
-|:-------|:----------|:------------|:-------|
-| `<INPUT>` | | **Argument** : Chemin vers le fichier `.gpkg` ou `.geojson` | |
-| `--format` | `-f` | Format d'entrée: `gpkg` ou `geojson` | **Requis** |
-| `--output-dir` | `-o` | Répertoire de sortie | `.` |
-| `--bbox` | `-b` | Bounding box: `minLon,minLat,maxLon,maxLat` | *Auto-détecté si omis* |
-| `--resolution` | `-r` | Taille du pixel en degrés (mutuellement exclusif avec `--scale`) | |
-| `--scale` | `-s` | Échelle en mètres par pixel (mutuellement exclusif avec `--resolution`) | |
-| `--fill` | | Couleur de remplissage RGBA hex (ex: `FF000080`) | `FF000080` |
-| `--stroke` | | Couleur de contour RGB hex (ex: `FF0000`) | `FF0000` |
-| `--stroke-width`| | Épaisseur du contour en pixels | `1` |
-| `--layer` | `-l` | Nom de la couche spécifique à rendre (GPKG uniquement) | *Toutes* |
-| `--output-name` | | Nom du fichier PNG de sortie (GeoJSON uniquement) | *Nom du fichier d'entrée* |
-| `--help` | `-h` | Afficher l'aide | |
-| `--version` | `-V` | Afficher la version | |
+| Option           | Raccourci | Description                                                             | Défaut                    |
+| :--------------- | :-------- | :---------------------------------------------------------------------- | :------------------------ |
+| `<INPUT>`        |           | **Argument** : Chemin vers le fichier `.gpkg` ou `.geojson`             |                           |
+| `--format`       | `-f`      | Format d'entrée: `gpkg` ou `geojson`                                    | **Requis**                |
+| `--output-dir`   | `-o`      | Répertoire de sortie                                                    | `.`                       |
+| `--bbox`         | `-b`      | Bounding box: `minLon,minLat,maxLon,maxLat`                             | *Auto-détecté si omis*    |
+| `--resolution`   | `-r`      | Taille du pixel en degrés (mutuellement exclusif avec `--scale`)        |                           |
+| `--scale`        | `-s`      | Échelle en mètres par pixel (mutuellement exclusif avec `--resolution`) |                           |
+| `--fill`         |           | Couleur de remplissage RGBA hex (ex: `FF000080`)                        | `FF000080`                |
+| `--stroke`       |           | Couleur de contour RGB hex (ex: `FF0000`)                               | `FF0000`                  |
+| `--stroke-width` |           | Épaisseur du contour en pixels                                          | `1`                       |
+| `--layer`        | `-l`      | Nom de la couche spécifique à rendre (GPKG uniquement)                  | *Toutes*                  |
+| `--output-name`  |           | Nom du fichier PNG de sortie (GeoJSON uniquement)                       | *Nom du fichier d'entrée* |
+| `--help`         | `-h`      | Afficher l'aide                                                         |                           |
+| `--version`      | `-V`      | Afficher la version                                                     |                           |
 
 > **Note** : Vous devez spécifier soit `--resolution`, soit `--scale`. Si la `bbox` n'est pas fournie, l'outil l'auto-détectera à partir de l'emprise des données.
 
@@ -143,8 +143,8 @@ L'objectif était de tester la productivité et la pertinence d'une stack de dé
 - **Processus** : Aucun code n'a été écrit à la main. Chaque fonctionnalité, du choix de l'algorithme scanline pour le remplissage à la gestion du parallélisme avec `rayon`, a été proposée, discutée et implémentée par l'IA sous la supervision de l'utilisateur.
 
 ### 📊 Bilan de l'expérience :
-- ⏱️ **Temps total** : Environ **2 heures**, incluant la conception, l'implémentation, le débogage et la documentation.
-- 💰 **Coût** : Environ **30€** de tokens API (OpenRouter / Anthropic).
+- ⏱️ **Temps total** : Environ **4 heures**, incluant la conception, l'implémentation, le débogage et la documentation.
+- 💰 **Coût** : Environ **60€** de tokens API (OpenRouter / Anthropic).
 - ✅ **Résultat** : Un code Rust robuste, typé, performant et entièrement documenté.
 
 *Ce projet démontre qu'avec les bons outils d'IA et une vision claire, on peut transformer une idée en un outil viable en un temps record.* 🚀
