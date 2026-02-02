@@ -480,13 +480,14 @@ let colors_enabled = !no_color
 - Linux ARM64 (aarch64-unknown-linux-gnu)
 - macOS Intel (x86_64-apple-darwin)
 - macOS Apple Silicon (aarch64-apple-darwin)
-- Windows AMD64 (x86_64-pc-windows-msvc)
 
 **Workflow:**
-1. Five parallel build jobs (one per platform)
+1. Four parallel build jobs (one per platform)
 2. Each job builds release binary and uploads artifact
 3. Release job waits for all builds, creates GitHub release
 4. Release includes all binaries + checksums.txt
+
+> **Note**: Windows builds are intentionally excluded due to persistent linking issues with `proj` and `sqlite3` on that platform.
 
 **Manual Testing:**
 ```bash

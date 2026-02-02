@@ -23,9 +23,16 @@
 ### ⬇️ Pre-built Binaries
 The easiest way to get started is to download a pre-built binary from the [Releases](https://github.com/AdrienGras/test-gpkg-to-png/releases) page.
 
-- Download the latest `gpkg-to-png-linux-amd64` binary for Linux
-- Make it executable: `chmod +x gpkg-to-png-linux-amd64`
-- Move it to your PATH: `sudo mv gpkg-to-png-linux-amd64 /usr/local/bin/gpkg-to-png`
+**Available platforms:**
+- **Linux**: `linux-amd64` (x86_64) and `linux-arm64` (AArch64)
+- **macOS**: `macos-amd64` (Intel) and `macos-arm64` (Apple Silicon)
+
+> **Note for Windows**: Pre-built binaries are currently not available for Windows due to complex linking dependencies with `proj` and `sqlite3`. If you are on Windows, we recommend using [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) or building from source within a Linux environment.
+
+**Installation (Linux example):**
+1. Download the latest `gpkg-to-png-linux-amd64` binary.
+2. Make it executable: `chmod +x gpkg-to-png-linux-amd64`
+3. Move it to your PATH: `sudo mv gpkg-to-png-linux-amd64 /usr/local/bin/gpkg-to-png`
 
 ### 📋 Prerequisites (for building from source)
 - [Rust](https://www.rust-lang.org/tools/install) (2021 edition)
