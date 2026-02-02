@@ -23,6 +23,9 @@ Arguments:
 
 Options:
   -f, --format <FORMAT>      Input format: gpkg or geojson [required]
+  -v, --verbose              Verbose mode: timestamped colored logs, per-geometry detail
+  -q, --quiet                Quiet mode: output only file paths (one per line)
+      --no-color             Disable ANSI colors (auto-detected if not TTY)
   -o, --output-dir <DIR>     Output directory [default: .]
   -b, --bbox <BBOX>          Bounding box: "minLon,minLat,maxLon,maxLat" [auto-detected if omitted]
   -r, --resolution <RES>     Pixel size in degrees (mutually exclusive with --scale)
@@ -58,12 +61,29 @@ gpkg-to-png test.geojson \
   -o ./output/
 ```
 
+**Verbose mode (with timestamps and colors):**
+```bash
+gpkg-to-png test.gpkg -f gpkg -v --resolution 0.0001
+# [0.00s] [INFO] Auto-detecting bounding box...
+# [0.02s] [INFO] Processing 1 layer(s)...
+# [0.03s] [DEBUG] Rendering geometry 1/100
+# ...
+# [1.23s] [INFO] Saved: ./layer.png
+```
+
+**Quiet mode (for scripting):**
+```bash
+gpkg-to-png test.gpkg -f gpkg -q --resolution 0.0001
+# ./layer.png
+```
+
 ## Architecture
 
 ```
 src/
 ├── main.rs       # Entry point, tokio async pipeline, format dispatch
 ├── cli.rs        # Argument parsing with clap, color/bbox validation
+├── logger.rs     # Verbosity control: quiet/normal/verbose modes, colors, timestamps
 ├── gpkg.rs       # GeoPackage reading with sqlx, PROJ reprojection
 ├── geojson.rs    # GeoJSON reading and parsing (assumes WGS84)
 ├── render.rs     # Main rendering orchestration with image/geo
@@ -75,7 +95,8 @@ src/
 
 ### Module Responsibilities
 
-- **cli**: Parses and validates arguments (bbox format, hex colors, resolution/scale)
+- **cli**: Parses and validates arguments (bbox format, hex colors, resolution/scale, verbosity)
+- **logger**: Global logger with three modes (quiet/normal/verbose), ANSI colors, elapsed timestamps
 - **gpkg**: Lists layers, reads WKB geometries, reprojects to WGS84 using `proj`
 - **geojson**: Reads and parses GeoJSON files, extracts polygon geometries, assumes WGS84
 - **render**: Parallel rendering (rayon), uses scanline algorithm for fills
@@ -114,6 +135,7 @@ src/
 - `image` - Raster image creation
 - `proj` - CRS reprojection
 - `sqlx` - SQLite/GeoPackage access
+- `atty` - TTY detection for automatic color support
 
 ## Test Data
 
@@ -297,6 +319,152 @@ See `docs/plans/2026-02-01-gpkg-to-png-design.md` for the full design specificat
 
 **"Follow the grain of the codebase"** - When a pattern exists for similar problems (CSV escaping), extend it rather than invent new approaches. Consistency beats novelty.
 
+### Feature: Verbosity System Refactor (2026-02-02)
+
+#### 📋 Context
+
+The initial verbosity implementation (by another LLM) had issues:
+- Quiet mode showed too much output (timings, messages)
+- Normal mode had logging prefixes that weren't wanted
+- Verbose mode lacked timestamps and colors
+- No TTY detection for automatic color support
+
+**Goal:** Three distinct, well-defined modes with clear separation.
+
+#### ✅ What Worked Well
+
+**1. Brainstorming Skill for Requirements Gathering**
+- Interactive Q&A clarified exact requirements before coding
+- Multiple-choice questions reduced ambiguity
+- User specified exact output format (e.g., `[0.00s] [INFO]` with separate brackets)
+- Design document written collaboratively prevented misunderstandings
+
+**2. Subagent-Driven Development at Scale**
+- 11 tasks executed with fresh subagent per task
+- Spec compliance review after each task caught issues early
+- Zero regressions: All 60+ tests passed throughout
+- Clean atomic commits (12 total)
+
+**3. Incremental Refactoring Strategy**
+- Task ordering ensured code always compiled:
+  1. Add dependency (atty)
+  2. Add CLI flag (--no-color)
+  3. Refactor logger (keep success temporarily)
+  4. Update call sites
+  5. Remove unused code (success)
+- Each commit was independently functional
+
+**4. Worktree Isolation**
+- Feature branch `feature/verbosity-refactor` in `.worktrees/`
+- Main branch untouched during development
+- Fast-forward merge at the end
+- Clean worktree removal after merge
+
+**5. Comprehensive Final Verification**
+- All three modes tested manually with real data
+- `--no-color` flag tested explicitly
+- TTY auto-detection verified (colors disabled in non-TTY)
+
+#### 🔧 Implementation Details
+
+**Logger Architecture:**
+```rust
+static LOGGER: OnceLock<Logger> = OnceLock::new();
+static START_TIME: OnceLock<Instant> = OnceLock::new();
+
+struct Logger {
+    level: VerbosityLevel,
+    colors_enabled: bool,
+}
+```
+
+**Color Detection Logic:**
+```rust
+let colors_enabled = !no_color
+    && std::env::var("NO_COLOR").is_err()
+    && atty::is(atty::Stream::Stdout);
+```
+
+**Output Behavior Matrix:**
+
+| Function | Quiet | Normal | Verbose |
+|----------|-------|--------|---------|
+| `output(path)` | `path` | `Saved: path` | `[0.00s] [INFO] Saved: path` |
+| `info(msg)` | (silent) | `msg` | `[0.00s] [INFO] msg` |
+| `debug(msg)` | (silent) | (silent) | `[0.00s] [DEBUG] msg` |
+| `warn(msg)` | (silent) | `msg` | `[0.00s] [WARN] msg` |
+| `error(msg)` | `Error: msg` | `Error: msg` | `[0.00s] [ERROR] msg` |
+| Progress bars | No | Yes | No (replaced by debug logs) |
+
+**ANSI Color Codes:**
+- ERROR: `\x1b[31m` (red)
+- WARN: `\x1b[33m` (yellow)
+- INFO: `\x1b[34m` (blue)
+- DEBUG: `\x1b[90m` (gray)
+- Timestamp: `\x1b[90m` (gray)
+
+#### 🎯 Best Practices Identified
+
+**1. Design Before Code**
+- Brainstorming session produced complete spec
+- Output format examples in design doc matched final implementation
+- No scope creep during implementation
+
+**2. Preserving Backward Compatibility**
+- Kept `success()` function until all call sites migrated
+- Removed in dedicated cleanup task
+- Gradual migration prevents compilation breaks
+
+**3. Duplicate Removal as Separate Task**
+- Identified 4 duplicate debug calls during audit
+- Removed in dedicated task (not mixed with feature work)
+- Cleaner git history
+
+**4. Progress Bars vs Verbose Logging**
+- Progress bars in Normal mode (user feedback)
+- Debug logs in Verbose mode (developer debugging)
+- Mutually exclusive: `show_progress = config.verbosity == VerbosityLevel::Normal`
+
+**5. Per-Geometry Logging**
+- Added `Rendering geometry X/Y` in verbose mode
+- Useful for debugging large datasets
+- Conditional: only when `VerbosityLevel::Verbose`
+
+#### ⚠️ Pitfalls Avoided
+
+**1. Global Mutable State**
+- Used `OnceLock` for thread-safe singleton
+- Logger initialized once at startup
+- No runtime mutex contention
+
+**2. Over-Engineering Colors**
+- Simple ANSI escape codes inline
+- No color library dependency needed
+- `atty` (30KB) vs `colored` (larger, more features)
+
+**3. Breaking Existing Tests**
+- All existing tests continued to pass
+- `#[allow(dead_code)]` for unused helper functions (is_verbose)
+- Clean compiler output (zero warnings)
+
+#### 🔢 Metrics
+
+- **Tasks**: 11 (+ 1 warning fix)
+- **Commits**: 12 atomic commits
+- **Files Changed**: 4 (cli.rs, logger.rs, main.rs, Cargo.toml)
+- **Lines Added**: ~150
+- **Lines Removed**: ~70
+- **Tests**: 60 unit + 5 integration, all passing
+- **Dependencies Added**: 1 (atty)
+
+#### 💡 Key Insights
+
+**"Brainstorming before coding saves rework"** - The interactive Q&A session produced a complete spec with exact output formats. Implementation matched spec 100% with no rework.
+
+**"Refactoring is ordering"** - The task order (add dep → add flag → refactor → migrate → cleanup) ensured the code always compiled. Each step was independently releasable.
+
+**"TTY detection is essential for CLI tools"** - Automatic color disabling when piped to files or CI prevents ANSI garbage in logs. The `NO_COLOR` env var standard is also respected.
+
 ---
 
-*Last updated: 2026-02-02 after empty type MultiPolygon support*
+*Last updated: 2026-02-02 after verbosity system refactor*
