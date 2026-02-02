@@ -20,7 +20,7 @@ fn test_help_flag() {
 fn test_missing_resolution_and_scale() {
     // Neither --resolution nor --scale is provided
     let output = Command::new("cargo")
-        .args(["run", "--", "test.gpkg"])
+        .args(["run", "--", "test.gpkg", "-f", "gpkg"])
         .output()
         .expect("Failed to execute command");
 
@@ -39,7 +39,7 @@ fn test_missing_resolution_and_scale() {
 fn test_mutually_exclusive_resolution_and_scale() {
     // Both --resolution and --scale are provided
     let output = Command::new("cargo")
-        .args(["run", "--", "test.gpkg", "--resolution=0.001", "--scale=10"])
+        .args(["run", "--", "test.gpkg", "-f", "gpkg", "--resolution=0.001", "--scale=10"])
         .output()
         .expect("Failed to execute command");
 
@@ -59,6 +59,8 @@ fn test_invalid_bbox() {
             "run",
             "--",
             "test.gpkg",
+            "-f",
+            "gpkg",
             "--bbox",
             "invalid",
             "--resolution",
@@ -79,6 +81,8 @@ fn test_file_not_found() {
             "run",
             "--",
             "nonexistent.gpkg",
+            "-f",
+            "gpkg",
             "--bbox=-4.5,48.0,-4.0,48.5",
             "--resolution=0.001",
         ])
@@ -106,6 +110,8 @@ fn test_real_gpkg_file() {
             "run",
             "--",
             "test.gpkg",
+            "-f",
+            "gpkg",
             "--bbox=-4.8,48.2,-4.3,48.6",
             "--resolution=0.001",
             "-o",

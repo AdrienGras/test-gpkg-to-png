@@ -6,6 +6,13 @@ use std::path::PathBuf;
 use crate::error::{GpkgError, Result};
 use crate::math::Bbox;
 
+/// Input file format
+#[derive(Clone, Debug, clap::ValueEnum)]
+pub enum Format {
+    Gpkg,
+    Geojson,
+}
+
 /// Command line arguments for gpkg-to-png.
 #[derive(Parser, Debug)]
 #[command(name = "gpkg-to-png")]
@@ -45,6 +52,14 @@ pub struct Args {
     /// Specific layer to render (default: all).
     #[arg(short, long)]
     pub layer: Option<String>,
+
+    /// Input file format
+    #[arg(short = 'f', long, value_enum)]
+    pub format: Format,
+
+    /// Output PNG filename (GeoJSON only, default: input filename)
+    #[arg(long)]
+    pub output_name: Option<String>,
 }
 
 /// Fully validated configuration object.
@@ -68,6 +83,10 @@ pub struct Config {
     pub stroke_width: u32,
     /// Optional layer name filter.
     pub layer: Option<String>,
+    /// Output filename for GeoJSON (None for GPKG).
+    pub output_name: Option<String>,
+    /// Input format.
+    pub format: Format,
 }
 
 impl Args {
@@ -109,6 +128,28 @@ impl Args {
         let fill = parse_rgba(&self.fill)?;
         let stroke = parse_rgb(&self.stroke)?;
 
+        // Validate format-specific options
+        if matches!(self.format, Format::Geojson) && self.layer.is_some() {
+            return Err(GpkgError::InvalidFormatOption(
+                "--layer cannot be used with geojson format".to_string()
+            ));
+        }
+
+        // Determine output name for GeoJSON
+        let output_name = if matches!(self.format, Format::Geojson) {
+            Some(
+                self.output_name.clone().unwrap_or_else(|| {
+                    self.input
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("output")
+                        .to_string()
+                })
+            )
+        } else {
+            None
+        };
+
         Ok(Config {
             input: self.input,
             output_dir: self.output_dir,
@@ -119,6 +160,8 @@ impl Args {
             stroke,
             stroke_width: self.stroke_width,
             layer: self.layer,
+            output_name,
+            format: self.format,
         })
     }
 }
@@ -265,6 +308,8 @@ mod tests {
             stroke: "FF0000".to_string(),
             stroke_width: 1,
             layer: None,
+            format: Format::Gpkg,
+            output_name: None,
         }
     }
 
@@ -337,5 +382,62 @@ mod tests {
         let center_lat: f64 = 48.0;
         let resolution = scale / (111319.0 * center_lat.to_radians().cos());
         assert!((resolution - 0.0001342).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_validate_geojson_with_layer_option() {
+        let args = Args {
+            input: PathBuf::from("test.geojson"),
+            output_dir: PathBuf::from("."),
+            bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
+            resolution: Some(0.001),
+            scale: None,
+            fill: "FF000080".to_string(),
+            stroke: "FF0000".to_string(),
+            stroke_width: 1,
+            layer: Some("test_layer".to_string()),
+            format: Format::Geojson,
+            output_name: None,
+        };
+        let err = args.validate().unwrap_err();
+        assert!(err.to_string().contains("--layer cannot be used with geojson format"));
+    }
+
+    #[test]
+    fn test_validate_geojson_default_output_name() {
+        let args = Args {
+            input: PathBuf::from("test.geojson"),
+            output_dir: PathBuf::from("."),
+            bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
+            resolution: Some(0.001),
+            scale: None,
+            fill: "FF000080".to_string(),
+            stroke: "FF0000".to_string(),
+            stroke_width: 1,
+            layer: None,
+            format: Format::Geojson,
+            output_name: None,
+        };
+        let config = args.validate().unwrap();
+        assert_eq!(config.output_name, Some("test".to_string()));
+    }
+
+    #[test]
+    fn test_validate_geojson_custom_output_name() {
+        let args = Args {
+            input: PathBuf::from("test.geojson"),
+            output_dir: PathBuf::from("."),
+            bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
+            resolution: Some(0.001),
+            scale: None,
+            fill: "FF000080".to_string(),
+            stroke: "FF0000".to_string(),
+            stroke_width: 1,
+            layer: None,
+            format: Format::Geojson,
+            output_name: Some("custom".to_string()),
+        };
+        let config = args.validate().unwrap();
+        assert_eq!(config.output_name, Some("custom".to_string()));
     }
 }
