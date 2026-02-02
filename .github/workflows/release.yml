@@ -183,7 +183,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build release
-        run: cargo build --release --no-default-features
+        run: cargo build --release
         env:
           VCPKGRS_DYNAMIC: 1
           # Tell proj-sys to use the system PROJ from vcpkg

@@ -5,26 +5,16 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-geo = "0.28"
+geo = "0.29"
+geojson = "0.24"
 image = "0.25"
-proj = { version = "0.31", features = ["bundled_proj"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-anyhow = "1"
-thiserror = "1"
-hex = "0.4"
-wkb = "0.7"
-rayon = "1.11.0"
-geojson = "0.24"
-indicatif = "0.18.3"
+rayon = "1.10"
 atty = "0.2"
 
-[dev-dependencies]
-tempfile = "3"
+[target.'cfg(not(windows))'.dependencies]
+proj = { version = "0.31", features = ["bundled_proj"] }
 
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
+[target.'cfg(windows)'.dependencies]
+proj = { version = "0.31" }
