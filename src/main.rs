@@ -67,7 +67,7 @@ async fn process_gpkg(config: cli::Config) -> Result<()> {
     let all_layers = reader.list_polygon_layers().await?;
 
     if all_layers.is_empty() {
-        eprintln!("Warning: No polygon layers found in the GeoPackage");
+        logger::warn("No polygon layers found in the GeoPackage");
         return Ok(());
     }
 
@@ -184,7 +184,7 @@ async fn process_gpkg(config: cli::Config) -> Result<()> {
     }
 
     let duration = start_total.elapsed();
-    logger::success(&format!("Total time: {:.2?}", duration));
+    logger::info(&format!("Total time: {:.2?}", duration));
     Ok(())
 }
 
@@ -292,7 +292,7 @@ async fn process_layer(
         ));
     }
 
-    logger::success(&format!("Saved: {}", output_path.display()));
+    logger::output(&output_path.display().to_string());
     logger::debug(&format!(
         "Layer {} timings: Read: {:.2?}, Render: {:.2?}, Save: {:.2?}",
         layer.name, duration_read, duration_render, duration_save
@@ -393,8 +393,8 @@ async fn process_geojson(config: cli::Config) -> Result<()> {
     renderer.save(&output_path)?;
 
     let duration = start_total.elapsed();
-    logger::success(&format!("Total time: {:.2?}", duration));
-    logger::success(&format!("Saved: {}", output_path.display()));
+    logger::info(&format!("Total time: {:.2?}", duration));
+    logger::output(&output_path.display().to_string());
 
     Ok(())
 }
