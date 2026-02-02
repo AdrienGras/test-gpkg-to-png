@@ -165,7 +165,7 @@ L'objectif était de tester la productivité et la pertinence d'une stack de dé
 - **Processus** : Aucun code n'a été écrit à la main. Chaque fonctionnalité, du choix de l'algorithme scanline pour le remplissage à la gestion du parallélisme avec `rayon`, a été proposée, discutée et implémentée par l'IA sous la supervision de l'utilisateur.
 
 ### 📊 Bilan de l'expérience :
-- ⏱️ **Temps total** : Environ **4 heures**, incluant la conception, l'implémentation, le débogage et la documentation.
+- ⏱️ **Temps total** : Environ **5 heures**, incluant la conception, l'implémentation, le débogage et la documentation.
 - 💰 **Coût** : Environ **60€** de tokens API (OpenRouter / Anthropic).
 - ✅ **Résultat** : Un code Rust robuste, typé, performant et entièrement documenté.
 
