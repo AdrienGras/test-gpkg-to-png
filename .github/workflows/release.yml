@@ -86,7 +86,7 @@ jobs:
 
   build-macos-amd64:
     name: Build macOS AMD64
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -97,21 +97,23 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --target x86_64-apple-darwin
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --target x86_64-apple-darwin
         env:
-          PKG_CONFIG_PATH: /usr/local/opt/proj/lib/pkgconfig
+          PKG_CONFIG_PATH: /opt/homebrew/opt/proj/lib/pkgconfig
 
       - name: Prepare binary
         run: |
-          cp target/release/gpkg-to-png gpkg-to-png-${{ github.ref_name }}-macos-amd64
+          cp target/x86_64-apple-darwin/release/gpkg-to-png gpkg-to-png-${{ github.ref_name }}-macos-amd64
           strip gpkg-to-png-${{ github.ref_name }}-macos-amd64
 
       - name: Upload artifact
