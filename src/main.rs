@@ -1,5 +1,6 @@
 mod cli;
 mod error;
+mod geojson;
 mod gpkg;
 mod math;
 mod render;
