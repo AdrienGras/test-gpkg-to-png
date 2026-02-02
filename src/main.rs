@@ -27,9 +27,7 @@ async fn main() {
 /// Orchestrates the global processing pipeline.
 ///
 /// 1. Parses CLI arguments and validates configuration.
-/// 2. Opens the GeoPackage and lists polygon layers.
-/// 3. Determines the bounding box (provided or auto-detected).
-/// 4. Processes each layer sequentially.
+/// 2. Dispatches to format-specific processor (GPKG or GeoJSON).
 async fn run() -> Result<()> {
     let args = Args::parse();
     let config = args.validate()?;
@@ -44,6 +42,18 @@ async fn run() -> Result<()> {
         std::fs::create_dir_all(&config.output_dir)?;
     }
 
+    match config.format {
+        cli::Format::Gpkg => process_gpkg(config).await?,
+        cli::Format::Geojson => {
+            todo!("implement process_geojson")
+        }
+    }
+
+    Ok(())
+}
+
+/// Process a GeoPackage file (multi-layer workflow).
+async fn process_gpkg(config: cli::Config) -> Result<()> {
     let start_total = Instant::now();
 
     // Open GeoPackage
