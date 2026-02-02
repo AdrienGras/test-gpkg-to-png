@@ -20,7 +20,14 @@
 
 ## 🚀 Installation
 
-### 📋 Prerequisites
+### ⬇️ Pre-built Binaries
+The easiest way to get started is to download a pre-built binary from the [Releases](https://github.com/AdrienGras/test-gpkg-to-png/releases) page.
+
+- Download the latest `gpkg-to-png-linux-amd64` binary for Linux
+- Make it executable: `chmod +x gpkg-to-png-linux-amd64`
+- Move it to your PATH: `sudo mv gpkg-to-png-linux-amd64 /usr/local/bin/gpkg-to-png`
+
+### 📋 Prerequisites (for building from source)
 - [Rust](https://www.rust-lang.org/tools/install) (2021 edition)
 - Cargo
 
@@ -31,8 +38,6 @@ cd test-gpkg-to-png
 cargo build --release
 ```
 The executable will be available at `target/release/gpkg-to-png`.
-
-> 💡 **Tip**: You can also download pre-built binaries for Linux from the [Releases](https://github.com/AdrienGras/test-gpkg-to-png/releases) section of this repository.
 
 ## 🛠️ Usage
 
