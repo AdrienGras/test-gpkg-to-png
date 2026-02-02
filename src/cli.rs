@@ -135,6 +135,12 @@ impl Args {
             ));
         }
 
+        if matches!(self.format, Format::Gpkg) && self.output_name.is_some() {
+            return Err(GpkgError::InvalidFormatOption(
+                "--output-name can only be used with geojson format".to_string()
+            ));
+        }
+
         // Determine output name for GeoJSON
         let output_name = if matches!(self.format, Format::Geojson) {
             Some(
@@ -439,5 +445,24 @@ mod tests {
         };
         let config = args.validate().unwrap();
         assert_eq!(config.output_name, Some("custom".to_string()));
+    }
+
+    #[test]
+    fn test_validate_gpkg_with_output_name_option() {
+        let args = Args {
+            input: PathBuf::from("test.gpkg"),
+            output_dir: PathBuf::from("."),
+            bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
+            resolution: Some(0.001),
+            scale: None,
+            fill: "FF000080".to_string(),
+            stroke: "FF0000".to_string(),
+            stroke_width: 1,
+            layer: None,
+            format: Format::Gpkg,
+            output_name: Some("custom".to_string()),
+        };
+        let err = args.validate().unwrap_err();
+        assert!(err.to_string().contains("--output-name can only be used with geojson format"));
     }
 }
