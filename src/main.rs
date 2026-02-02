@@ -373,7 +373,11 @@ async fn process_geojson(config: cli::Config) -> Result<()> {
     };
 
     // Render all geometries
+    let total = geometries.len();
     for (i, geom) in geometries.iter().enumerate() {
+        if config.verbosity == VerbosityLevel::Verbose {
+            logger::debug(&format!("Rendering geometry {}/{}", i + 1, total));
+        }
         renderer.render_multipolygon(geom);
         if let Some(ref pb) = pb {
             pb.set_position((i + 1) as u64);
