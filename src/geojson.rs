@@ -271,6 +271,41 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_empty_type_in_featurecollection() {
+        let json = r#"{
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "",
+                        "coordinates": [[[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]]]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[2.0, 2.0], [3.0, 2.0], [3.0, 3.0], [2.0, 3.0], [2.0, 2.0]]]
+                    }
+                },
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "",
+                        "coordinates": [[[[4.0, 4.0], [5.0, 4.0], [5.0, 5.0], [4.0, 5.0], [4.0, 4.0]]]]
+                    }
+                }
+            ]
+        }"#;
+
+        let processed = preprocess_geojson(json);
+        let geojson: GeoJson = processed.parse().unwrap();
+        let geometries = extract_geometries(&geojson);
+        assert_eq!(geometries.len(), 3); // All three features should be parsed
+    }
+
+    #[test]
     fn test_ignore_non_polygon_geometries() {
         let json = r#"{
             "type": "FeatureCollection",
