@@ -174,7 +174,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          vcpkg install proj:x64-windows-static-md sqlite3:x64-windows-static-md
+          vcpkg install proj:x64-windows-static-md sqlite3[core,tool]:x64-windows-static-md
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -186,6 +186,8 @@ jobs:
         run: cargo build --release
         env:
           VCPKGRS_DYNAMIC: 1
+          # Tell proj-sys to use the system PROJ from vcpkg
+          PROJ_SYS_BUNDLED: 0
 
       - name: Prepare binary
         run: |
