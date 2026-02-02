@@ -30,6 +30,10 @@ pub struct Args {
     #[arg(short, long)]
     pub quiet: bool,
 
+    /// Disable colored output (auto-detected by default).
+    #[arg(long)]
+    pub no_color: bool,
+
     /// Output directory.
     #[arg(short, long, default_value = ".")]
     pub output_dir: PathBuf,
@@ -98,6 +102,8 @@ pub struct Config {
     pub format: Format,
     /// Verbosity level for output control.
     pub verbosity: VerbosityLevel,
+    /// Whether to disable colored output.
+    pub no_color: bool,
 }
 
 impl Args {
@@ -195,6 +201,7 @@ impl Args {
             output_name,
             format: self.format,
             verbosity,
+            no_color: self.no_color,
         })
     }
 }
@@ -335,6 +342,7 @@ mod tests {
             input: PathBuf::from("test.gpkg"),
             verbose: false,
             quiet: false,
+            no_color: false,
             output_dir: PathBuf::from("."),
             bbox: bbox.map(|s| s.to_string()),
             resolution,
@@ -425,6 +433,7 @@ mod tests {
             input: PathBuf::from("test.geojson"),
             verbose: false,
             quiet: false,
+            no_color: false,
             output_dir: PathBuf::from("."),
             bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
             resolution: Some(0.001),
@@ -448,6 +457,7 @@ mod tests {
             input: PathBuf::from("test.geojson"),
             verbose: false,
             quiet: false,
+            no_color: false,
             output_dir: PathBuf::from("."),
             bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
             resolution: Some(0.001),
@@ -469,6 +479,7 @@ mod tests {
             input: PathBuf::from("test.geojson"),
             verbose: false,
             quiet: false,
+            no_color: false,
             output_dir: PathBuf::from("."),
             bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
             resolution: Some(0.001),
@@ -490,6 +501,7 @@ mod tests {
             input: PathBuf::from("test.gpkg"),
             verbose: false,
             quiet: false,
+            no_color: false,
             output_dir: PathBuf::from("."),
             bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
             resolution: Some(0.001),
