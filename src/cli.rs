@@ -4,6 +4,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 use crate::error::{GpkgError, Result};
+use crate::logger::VerbosityLevel;
 use crate::math::Bbox;
 
 /// Input file format
@@ -18,8 +19,16 @@ pub enum Format {
 #[command(name = "gpkg-to-png")]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    /// Path to the .gpkg file.
+    /// Path to the input file (.gpkg or .geojson).
     pub input: PathBuf,
+
+    /// Enable verbose output (display debug information).
+    #[arg(short, long)]
+    pub verbose: bool,
+
+    /// Suppress non-error output (quiet mode).
+    #[arg(short, long)]
+    pub quiet: bool,
 
     /// Output directory.
     #[arg(short, long, default_value = ".")]
@@ -87,6 +96,8 @@ pub struct Config {
     pub output_name: Option<String>,
     /// Input format.
     pub format: Format,
+    /// Verbosity level for output control.
+    pub verbosity: VerbosityLevel,
 }
 
 impl Args {
@@ -94,6 +105,23 @@ impl Args {
     ///
     /// Checks for mutually exclusive options and parses color hex strings.
     pub fn validate(self) -> Result<Config> {
+        // Validate that verbose and quiet are mutually exclusive
+        if self.verbose && self.quiet {
+            return Err(GpkgError::MutuallyExclusiveOptions(
+                "verbose".to_string(),
+                "quiet".to_string(),
+            ));
+        }
+
+        // Determine verbosity level
+        let verbosity = if self.quiet {
+            VerbosityLevel::Quiet
+        } else if self.verbose {
+            VerbosityLevel::Verbose
+        } else {
+            VerbosityLevel::Normal
+        };
+
         // Validate that at least one of resolution or scale is provided
         if self.resolution.is_none() && self.scale.is_none() {
             return Err(GpkgError::MissingResolutionOrScale);
@@ -131,27 +159,25 @@ impl Args {
         // Validate format-specific options
         if matches!(self.format, Format::Geojson) && self.layer.is_some() {
             return Err(GpkgError::InvalidFormatOption(
-                "--layer cannot be used with geojson format".to_string()
+                "--layer cannot be used with geojson format".to_string(),
             ));
         }
 
         if matches!(self.format, Format::Gpkg) && self.output_name.is_some() {
             return Err(GpkgError::InvalidFormatOption(
-                "--output-name can only be used with geojson format".to_string()
+                "--output-name can only be used with geojson format".to_string(),
             ));
         }
 
         // Determine output name for GeoJSON
         let output_name = if matches!(self.format, Format::Geojson) {
-            Some(
-                self.output_name.clone().unwrap_or_else(|| {
-                    self.input
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("output")
-                        .to_string()
-                })
-            )
+            Some(self.output_name.clone().unwrap_or_else(|| {
+                self.input
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("output")
+                    .to_string()
+            }))
         } else {
             None
         };
@@ -168,6 +194,7 @@ impl Args {
             layer: self.layer,
             output_name,
             format: self.format,
+            verbosity,
         })
     }
 }
@@ -306,6 +333,8 @@ mod tests {
     fn create_test_args(resolution: Option<f64>, scale: Option<f64>, bbox: Option<&str>) -> Args {
         Args {
             input: PathBuf::from("test.gpkg"),
+            verbose: false,
+            quiet: false,
             output_dir: PathBuf::from("."),
             bbox: bbox.map(|s| s.to_string()),
             resolution,
@@ -394,6 +423,8 @@ mod tests {
     fn test_validate_geojson_with_layer_option() {
         let args = Args {
             input: PathBuf::from("test.geojson"),
+            verbose: false,
+            quiet: false,
             output_dir: PathBuf::from("."),
             bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
             resolution: Some(0.001),
@@ -406,13 +437,17 @@ mod tests {
             output_name: None,
         };
         let err = args.validate().unwrap_err();
-        assert!(err.to_string().contains("--layer cannot be used with geojson format"));
+        assert!(err
+            .to_string()
+            .contains("--layer cannot be used with geojson format"));
     }
 
     #[test]
     fn test_validate_geojson_default_output_name() {
         let args = Args {
             input: PathBuf::from("test.geojson"),
+            verbose: false,
+            quiet: false,
             output_dir: PathBuf::from("."),
             bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
             resolution: Some(0.001),
@@ -432,6 +467,8 @@ mod tests {
     fn test_validate_geojson_custom_output_name() {
         let args = Args {
             input: PathBuf::from("test.geojson"),
+            verbose: false,
+            quiet: false,
             output_dir: PathBuf::from("."),
             bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
             resolution: Some(0.001),
@@ -451,6 +488,8 @@ mod tests {
     fn test_validate_gpkg_with_output_name_option() {
         let args = Args {
             input: PathBuf::from("test.gpkg"),
+            verbose: false,
+            quiet: false,
             output_dir: PathBuf::from("."),
             bbox: Some("-4.5,48.0,-4.0,48.5".to_string()),
             resolution: Some(0.001),
@@ -463,6 +502,42 @@ mod tests {
             output_name: Some("custom".to_string()),
         };
         let err = args.validate().unwrap_err();
-        assert!(err.to_string().contains("--output-name can only be used with geojson format"));
+        assert!(err
+            .to_string()
+            .contains("--output-name can only be used with geojson format"));
+    }
+
+    #[test]
+    fn test_validate_default_verbosity() {
+        let args = create_test_args(Some(0.001), None, Some("-4.5,48.0,-4.0,48.5"));
+        let config = args.validate().unwrap();
+        assert_eq!(config.verbosity, VerbosityLevel::Normal);
+    }
+
+    #[test]
+    fn test_validate_verbose_flag() {
+        let mut args = create_test_args(Some(0.001), None, Some("-4.5,48.0,-4.0,48.5"));
+        args.verbose = true;
+        let config = args.validate().unwrap();
+        assert_eq!(config.verbosity, VerbosityLevel::Verbose);
+    }
+
+    #[test]
+    fn test_validate_quiet_flag() {
+        let mut args = create_test_args(Some(0.001), None, Some("-4.5,48.0,-4.0,48.5"));
+        args.quiet = true;
+        let config = args.validate().unwrap();
+        assert_eq!(config.verbosity, VerbosityLevel::Quiet);
+    }
+
+    #[test]
+    fn test_validate_verbose_and_quiet_mutually_exclusive() {
+        let mut args = create_test_args(Some(0.001), None, Some("-4.5,48.0,-4.0,48.5"));
+        args.verbose = true;
+        args.quiet = true;
+        let err = args.validate().unwrap_err();
+        assert!(err.to_string().contains("mutually exclusive"));
+        assert!(err.to_string().contains("verbose"));
+        assert!(err.to_string().contains("quiet"));
     }
 }

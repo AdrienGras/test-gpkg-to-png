@@ -2,6 +2,7 @@ mod cli;
 mod error;
 mod geojson;
 mod gpkg;
+mod logger;
 mod math;
 mod render;
 
@@ -13,6 +14,7 @@ use cli::Args;
 use error::{GpkgError, Result};
 use geojson::GeojsonReader;
 use gpkg::{reproject_bbox_to_wgs84, GpkgReader, LayerInfo};
+use logger::VerbosityLevel;
 use math::Bbox;
 use render::{RenderConfig, Renderer};
 
@@ -32,6 +34,9 @@ async fn main() {
 async fn run() -> Result<()> {
     let args = Args::parse();
     let config = args.validate()?;
+
+    // Initialize logger with verbosity level
+    logger::Logger::init(config.verbosity);
 
     // Check input file exists
     if !config.input.exists() {
@@ -85,7 +90,7 @@ async fn process_gpkg(config: cli::Config) -> Result<()> {
     let bbox = if let Some(bbox) = config.bbox {
         bbox
     } else {
-        println!("Auto-detecting bounding box...");
+        logger::info("Auto-detecting bounding box...");
         // Auto-detect from all layers
         let mut union_bbox: Option<(f64, f64, f64, f64)> = None;
 
@@ -113,10 +118,10 @@ async fn process_gpkg(config: cli::Config) -> Result<()> {
             GpkgError::InvalidBbox("Could not determine bounding box from layers".to_string())
         })?;
 
-        println!(
+        logger::info(&format!(
             "Auto-detected bbox: {},{},{},{}",
             min_lon, min_lat, max_lon, max_lat
-        );
+        ));
         Bbox::new(min_lon, min_lat, max_lon, max_lat)
     };
 
@@ -124,29 +129,40 @@ async fn process_gpkg(config: cli::Config) -> Result<()> {
     let resolution = if let Some(scale) = config.scale {
         let center_lat = (bbox.min_lat + bbox.max_lat) / 2.0;
         let resolution = scale / (111319.0 * center_lat.to_radians().cos());
-        println!(
+        logger::info(&format!(
             "Scale: {} m/pixel -> Resolution: {:.10} deg/pixel",
             scale, resolution
-        );
+        ));
         resolution
     } else {
         config.resolution.unwrap()
     };
 
-    println!("Processing {} layer(s)...", layers_to_process.len());
+    logger::info(&format!("Processing {} layer(s)...", layers_to_process.len()));
+    logger::debug(&format!("Resolution: {:.10} degrees/pixel", resolution));
+    logger::debug(&format!("Bounding box: {:?}", bbox));
 
+    // Only show progress bars in Normal and Verbose modes
+    let show_progress = config.verbosity != VerbosityLevel::Quiet;
     let multi = MultiProgress::new();
-    let main_pb = multi.add(ProgressBar::new(layers_to_process.len() as u64));
-    main_pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
+    let main_pb = if show_progress {
+        let pb = multi.add(ProgressBar::new(layers_to_process.len() as u64));
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        Some(pb)
+    } else {
+        None
+    };
 
     // Process each layer
     for layer in &layers_to_process {
-        main_pb.set_message(format!("Layer: {}", layer.name));
+        if let Some(ref pb) = main_pb {
+            pb.set_message(format!("Layer: {}", layer.name));
+        }
 
         process_layer(
             &reader,
@@ -155,15 +171,20 @@ async fn process_gpkg(config: cli::Config) -> Result<()> {
             resolution,
             &config,
             &multi,
+            show_progress,
         ).await?;
 
-        main_pb.inc(1);
+        if let Some(ref pb) = main_pb {
+            pb.inc(1);
+        }
     }
 
-    main_pb.finish_with_message("All layers processed");
+    if let Some(pb) = main_pb {
+        pb.finish_with_message("All layers processed");
+    }
 
     let duration = start_total.elapsed();
-    println!("Total time: {:.2?}", duration);
+    logger::success(&format!("Total time: {:.2?}", duration));
     Ok(())
 }
 
@@ -180,22 +201,38 @@ async fn process_layer(
     resolution: f64,
     config: &cli::Config,
     multi: &MultiProgress,
+    show_progress: bool,
 ) -> Result<()> {
     let start_layer = Instant::now();
 
     // 1. Read and reproject
-    let pb = multi.add(ProgressBar::new_spinner());
-    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}").unwrap());
-    pb.set_message(format!("Reading and reprojecting {}...", layer.name));
+    let pb = if show_progress {
+        let pb = multi.add(ProgressBar::new_spinner());
+        pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}").unwrap());
+        pb.set_message(format!("Reading and reprojecting {}...", layer.name));
+        Some(pb)
+    } else {
+        None
+    };
 
     let start_read = Instant::now();
     let geometries = reader.read_geometries_wgs84(layer).await?;
     let duration_read = start_read.elapsed();
 
     if geometries.is_empty() {
-        pb.finish_with_message(format!("  Layer {}: skipped (no geometries)", layer.name));
+        if let Some(pb) = pb {
+            pb.finish_with_message(format!("  Layer {}: skipped (no geometries)", layer.name));
+        }
+        logger::debug(&format!("Layer {}: skipped (no geometries)", layer.name));
         return Ok(());
     }
+
+    logger::debug(&format!(
+        "Layer {}: read {} geometries in {:.2?}",
+        layer.name,
+        geometries.len(),
+        duration_read
+    ));
 
     // 2. Render
     let render_config = RenderConfig {
@@ -209,26 +246,37 @@ async fn process_layer(
     let renderer = Renderer::new(render_config)?;
     let (width, height) = renderer.dimensions();
 
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("    {msg} [{bar:20.yellow/orange}] {pos}/{len} ({percent}%)")
-            .unwrap()
-            .progress_chars("=>-"),
-    );
-    pb.set_length(geometries.len() as u64);
-    pb.set_message(format!("Rendering {} ({}x{})", layer.name, width, height));
+    if let Some(ref pb) = pb {
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("    {msg} [{bar:20.yellow/orange}] {pos}/{len} ({percent}%)")
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+        pb.set_length(geometries.len() as u64);
+        pb.set_message(format!("Rendering {} ({}x{})", layer.name, width, height));
+    }
+
+    logger::debug(&format!(
+        "Layer {}: image dimensions {}x{}",
+        layer.name, width, height
+    ));
 
     let start_render = Instant::now();
     // Render all geometries (using the parallelized renderer internally)
     for (i, geom) in geometries.iter().enumerate() {
         renderer.render_multipolygon(geom);
-        pb.set_position((i + 1) as u64);
+        if let Some(ref pb) = pb {
+            pb.set_position((i + 1) as u64);
+        }
     }
     let duration_render = start_render.elapsed();
 
     // 3. Save
-    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}").unwrap());
-    pb.set_message(format!("Saving {}.png...", layer.name));
+    if let Some(ref pb) = pb {
+        pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}").unwrap());
+        pb.set_message(format!("Saving {}.png...", layer.name));
+    }
 
     let start_save = Instant::now();
     let output_path = config.output_dir.join(format!("{}.png", layer.name));
@@ -236,9 +284,18 @@ async fn process_layer(
     let duration_save = start_save.elapsed();
 
     let total_layer = start_layer.elapsed();
-    pb.finish_with_message(format!(
-        "  Layer {}: done in {:.2?} (Read: {:.2?}, Render: {:.2?}, Save: {:.2?})",
-        layer.name, total_layer, duration_read, duration_render, duration_save
+
+    if let Some(pb) = pb {
+        pb.finish_with_message(format!(
+            "  Layer {}: done in {:.2?} (Read: {:.2?}, Render: {:.2?}, Save: {:.2?})",
+            layer.name, total_layer, duration_read, duration_render, duration_save
+        ));
+    }
+
+    logger::success(&format!("Saved: {}", output_path.display()));
+    logger::debug(&format!(
+        "Layer {} timings: Read: {:.2?}, Render: {:.2?}, Save: {:.2?}",
+        layer.name, duration_read, duration_render, duration_save
     ));
 
     Ok(())
@@ -248,24 +305,25 @@ async fn process_layer(
 async fn process_geojson(config: cli::Config) -> Result<()> {
     let start_total = Instant::now();
 
-    println!("Reading GeoJSON file...");
+    logger::info("Reading GeoJSON file...");
     let reader = GeojsonReader::open(&config.input).await?;
     let geometries = reader.get_geometries();
 
-    println!("Found {} polygon geometries", geometries.len());
+    logger::info(&format!("Found {} polygon geometries", geometries.len()));
+    logger::debug(&format!("GeoJSON contains {} geometries", geometries.len()));
 
     // Determine bounding box
     let bbox = if let Some(bbox) = config.bbox {
         bbox
     } else {
-        println!("Auto-detecting bounding box...");
+        logger::info("Auto-detecting bounding box...");
         let bbox = reader.compute_bbox().ok_or_else(|| {
             GpkgError::InvalidBbox("Could not determine bounding box from geometries".to_string())
         })?;
-        println!(
+        logger::info(&format!(
             "Auto-detected bbox: {},{},{},{}",
             bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat
-        );
+        ));
         bbox
     };
 
@@ -273,14 +331,17 @@ async fn process_geojson(config: cli::Config) -> Result<()> {
     let resolution = if let Some(scale) = config.scale {
         let center_lat = (bbox.min_lat + bbox.max_lat) / 2.0;
         let resolution = scale / (111319.0 * center_lat.to_radians().cos());
-        println!(
+        logger::info(&format!(
             "Scale: {} m/pixel -> Resolution: {:.10} deg/pixel",
             scale, resolution
-        );
+        ));
         resolution
     } else {
         config.resolution.unwrap()
     };
+
+    logger::debug(&format!("Resolution: {:.10} degrees/pixel", resolution));
+    logger::debug(&format!("Bounding box: {:?}", bbox));
 
     // Create renderer
     let render_config = RenderConfig {
@@ -294,34 +355,46 @@ async fn process_geojson(config: cli::Config) -> Result<()> {
     let renderer = Renderer::new(render_config)?;
     let (width, height) = renderer.dimensions();
 
-    println!("Rendering {}x{} image...", width, height);
+    logger::info(&format!("Rendering {}x{} image...", width, height));
+    logger::debug(&format!("Image dimensions: {}x{} pixels", width, height));
 
-    let pb = ProgressBar::new(geometries.len() as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
+    // Only show progress bar in Normal and Verbose modes
+    let show_progress = config.verbosity != VerbosityLevel::Quiet;
+    let pb = if show_progress {
+        let pb = ProgressBar::new(geometries.len() as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        Some(pb)
+    } else {
+        None
+    };
 
     // Render all geometries
     for (i, geom) in geometries.iter().enumerate() {
         renderer.render_multipolygon(geom);
-        pb.set_position((i + 1) as u64);
+        if let Some(ref pb) = pb {
+            pb.set_position((i + 1) as u64);
+        }
     }
 
-    pb.finish_with_message("Rendering complete");
+    if let Some(pb) = pb {
+        pb.finish_with_message("Rendering complete");
+    }
 
     // Save PNG
     let output_name = config.output_name.as_ref().unwrap();
     let output_path = config.output_dir.join(format!("{}.png", output_name));
 
-    println!("Saving {}...", output_path.display());
+    logger::info(&format!("Saving {}...", output_path.display()));
     renderer.save(&output_path)?;
 
     let duration = start_total.elapsed();
-    println!("Total time: {:.2?}", duration);
-    println!("Saved: {}", output_path.display());
+    logger::success(&format!("Total time: {:.2?}", duration));
+    logger::success(&format!("Saved: {}", output_path.display()));
 
     Ok(())
 }

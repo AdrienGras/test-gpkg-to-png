@@ -96,7 +96,7 @@ impl Renderer {
         }
 
         let num_bands = rayon::current_num_threads().max(1) * 4;
-        let band_height = (self.height as usize + num_bands - 1) / num_bands;
+        let band_height = (self.height as usize).div_ceil(num_bands);
 
         (0..num_bands).into_par_iter().for_each(|band_idx| {
             let y_start = (band_idx * band_height) as i32;
@@ -132,9 +132,15 @@ impl Renderer {
                     let mut intersections = active_edge_table.iter().peekable();
                     if intersections.peek().is_some() {
                         let mut img = self.image.lock().unwrap();
-                        while let (Some(e1), Some(e2)) = (intersections.next(), intersections.next()) {
-                            let x_start = (e1.x_current.round() as i32).max(0).min(self.width as i32 - 1) as u32;
-                            let x_end = (e2.x_current.round() as i32).max(0).min(self.width as i32) as u32;
+                        while let (Some(e1), Some(e2)) =
+                            (intersections.next(), intersections.next())
+                        {
+                            let x_start = (e1.x_current.round() as i32)
+                                .max(0)
+                                .min(self.width as i32 - 1)
+                                as u32;
+                            let x_end =
+                                (e2.x_current.round() as i32).max(0).min(self.width as i32) as u32;
 
                             for x in x_start..x_end {
                                 blend_pixel(&mut img, x, y as u32, fill_color);
