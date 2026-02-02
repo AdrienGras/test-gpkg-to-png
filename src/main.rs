@@ -11,6 +11,7 @@ use std::time::Instant;
 
 use cli::Args;
 use error::{GpkgError, Result};
+use geojson::GeojsonReader;
 use gpkg::{reproject_bbox_to_wgs84, GpkgReader, LayerInfo};
 use math::Bbox;
 use render::{RenderConfig, Renderer};
@@ -44,9 +45,7 @@ async fn run() -> Result<()> {
 
     match config.format {
         cli::Format::Gpkg => process_gpkg(config).await?,
-        cli::Format::Geojson => {
-            todo!("implement process_geojson")
-        }
+        cli::Format::Geojson => process_geojson(config).await?,
     }
 
     Ok(())
@@ -241,6 +240,88 @@ async fn process_layer(
         "  Layer {}: done in {:.2?} (Read: {:.2?}, Render: {:.2?}, Save: {:.2?})",
         layer.name, total_layer, duration_read, duration_render, duration_save
     ));
+
+    Ok(())
+}
+
+/// Process a GeoJSON file (single PNG output).
+async fn process_geojson(config: cli::Config) -> Result<()> {
+    let start_total = Instant::now();
+
+    println!("Reading GeoJSON file...");
+    let reader = GeojsonReader::open(&config.input).await?;
+    let geometries = reader.get_geometries();
+
+    println!("Found {} polygon geometries", geometries.len());
+
+    // Determine bounding box
+    let bbox = if let Some(bbox) = config.bbox {
+        bbox
+    } else {
+        println!("Auto-detecting bounding box...");
+        let bbox = reader.compute_bbox().ok_or_else(|| {
+            GpkgError::InvalidBbox("Could not determine bounding box from geometries".to_string())
+        })?;
+        println!(
+            "Auto-detected bbox: {},{},{},{}",
+            bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat
+        );
+        bbox
+    };
+
+    // Compute resolution from scale if needed
+    let resolution = if let Some(scale) = config.scale {
+        let center_lat = (bbox.min_lat + bbox.max_lat) / 2.0;
+        let resolution = scale / (111319.0 * center_lat.to_radians().cos());
+        println!(
+            "Scale: {} m/pixel -> Resolution: {:.10} deg/pixel",
+            scale, resolution
+        );
+        resolution
+    } else {
+        config.resolution.unwrap()
+    };
+
+    // Create renderer
+    let render_config = RenderConfig {
+        bbox,
+        resolution,
+        fill: config.fill,
+        stroke: config.stroke,
+        stroke_width: config.stroke_width,
+    };
+
+    let renderer = Renderer::new(render_config)?;
+    let (width, height) = renderer.dimensions();
+
+    println!("Rendering {}x{} image...", width, height);
+
+    let pb = ProgressBar::new(geometries.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+
+    // Render all geometries
+    for (i, geom) in geometries.iter().enumerate() {
+        renderer.render_multipolygon(geom);
+        pb.set_position((i + 1) as u64);
+    }
+
+    pb.finish_with_message("Rendering complete");
+
+    // Save PNG
+    let output_name = config.output_name.as_ref().unwrap();
+    let output_path = config.output_dir.join(format!("{}.png", output_name));
+
+    println!("Saving {}...", output_path.display());
+    renderer.save(&output_path)?;
+
+    let duration = start_total.elapsed();
+    println!("Total time: {:.2?}", duration);
+    println!("Saved: {}", output_path.display());
 
     Ok(())
 }

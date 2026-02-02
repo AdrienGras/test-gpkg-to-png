@@ -1,7 +1,7 @@
 //! GeoJSON file reading and parsing.
 
 use geo::{Coord, LineString, MultiPolygon, Polygon};
-use geojson::{Feature, GeoJson, Geometry, Value};
+use geojson::{GeoJson, Geometry, Value};
 use std::fs;
 use std::path::Path;
 
