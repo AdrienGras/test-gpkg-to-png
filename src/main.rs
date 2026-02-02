@@ -264,7 +264,11 @@ async fn process_layer(
 
     let start_render = Instant::now();
     // Render all geometries (using the parallelized renderer internally)
+    let total = geometries.len();
     for (i, geom) in geometries.iter().enumerate() {
+        if config.verbosity == VerbosityLevel::Verbose {
+            logger::debug(&format!("Rendering geometry {}/{}", i + 1, total));
+        }
         renderer.render_multipolygon(geom);
         if let Some(ref pb) = pb {
             pb.set_position((i + 1) as u64);
