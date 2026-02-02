@@ -66,6 +66,7 @@ impl Logger {
     }
 
     /// Returns true if verbose mode is enabled.
+    #[allow(dead_code)]
     pub fn is_verbose(&self) -> bool {
         self.level == VerbosityLevel::Verbose
     }
@@ -190,6 +191,7 @@ pub fn debug(msg: &str) {
 }
 
 /// Returns true if verbose mode is enabled.
+#[allow(dead_code)]
 pub fn is_verbose() -> bool {
     Logger::instance().is_verbose()
 }
