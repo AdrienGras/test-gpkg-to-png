@@ -262,6 +262,41 @@ See `docs/plans/2026-02-01-gpkg-to-png-design.md` for the full design specificat
 
 **"Tests are cheaper than debugging"** - The 2 bugs found during integration testing would have cost hours to debug in production. Investing 15 minutes in integration tests saved significant future pain.
 
+### Feature: Empty Type MultiPolygon Support (2026-02-02)
+
+#### ✅ What Worked Well
+
+**1. Following Established Patterns**
+- String replacement approach consistent with CSV fix (line 32)
+- Minimal code change (3 lines + tests)
+- Zero risk of regression
+
+**2. Test-Driven Development**
+- Three tests covering all use cases (root, Feature, FeatureCollection)
+- Tests written before implementation confirmed
+- All tests pass on first run after implementation
+
+**3. Simple Solution Over Complex**
+- Rejected parsing with serde_json (too complex)
+- Rejected regex approach (unnecessary)
+- String replacement sufficient and maintainable
+
+#### 🎯 Best Practices Identified
+
+**1. Pattern Consistency**
+- New malformed data fixes should follow established patterns
+- Comment style matches existing code
+- Placement logical (with other pre-processing)
+
+**2. Comprehensive Test Coverage**
+- Test root geometry, Feature, and FeatureCollection
+- Test mixed valid/invalid types
+- Verify all existing tests still pass
+
+#### 💡 Key Insight
+
+**"Follow the grain of the codebase"** - When a pattern exists for similar problems (CSV escaping), extend it rather than invent new approaches. Consistency beats novelty.
+
 ---
 
-*Last updated: 2026-02-02 after GeoJSON support merge*
+*Last updated: 2026-02-02 after empty type MultiPolygon support*
