@@ -255,6 +255,22 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_empty_type_in_feature() {
+        let json = r#"{
+            "type": "Feature",
+            "geometry": {
+                "type": "",
+                "coordinates": [[[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]]]
+            }
+        }"#;
+
+        let processed = preprocess_geojson(json);
+        let geojson: GeoJson = processed.parse().unwrap();
+        let geometries = extract_geometries(&geojson);
+        assert_eq!(geometries.len(), 1);
+    }
+
+    #[test]
     fn test_ignore_non_polygon_geometries() {
         let json = r#"{
             "type": "FeatureCollection",
