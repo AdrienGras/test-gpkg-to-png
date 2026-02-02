@@ -36,7 +36,7 @@ async fn run() -> Result<()> {
     let config = args.validate()?;
 
     // Initialize logger with verbosity level
-    logger::Logger::init(config.verbosity, false);
+    logger::Logger::init(config.verbosity, config.no_color);
 
     // Check input file exists
     if !config.input.exists() {
