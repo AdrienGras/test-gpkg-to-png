@@ -5,67 +5,67 @@
 [![Release](https://github.com/AdrienGras/test-gpkg-to-png/actions/workflows/release.yml/badge.svg)](https://github.com/AdrienGras/test-gpkg-to-png/releases)
 [![Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blue.svg)](https://claude.ai/code)
 
-> Un outil CLI ultra-rapide en Rust pour transformer vos fichiers GeoPackage et GeoJSON en superbes overlays PNG transparents. 🚀
+> A blazing-fast Rust CLI tool to transform your GeoPackage and GeoJSON files into beautiful transparent PNG overlays. 🚀
 
 ---
 
-## ✨ Fonctionnalités
+## ✨ Features
 
-- 📦 **Formats Multiples** : Supporte les fichiers GeoPackage (`.gpkg`) et GeoJSON (`.geojson`).
-- 📚 **Lecture Multi-Couches** : Extrait automatiquement les polygones/multipolygones (GPKG) ou géométries (GeoJSON).
-- 🌍 **Reprojection à la volée** : Conversion automatique vers WGS84 (EPSG:4326) avec `proj` pour les GPKG.
-- 🎨 **Stylisation Flexible** : Couleurs de remplissage (RGBA) et de contour (RGB) entièrement configurables.
-- 📐 **Haute Précision** : Résolution personnalisable en degrés par pixel ou échelle en mètres par pixel.
-- 🏎️ **Performance Rust** : Rendu parallélisé pour une vitesse d'exécution optimale.
+- 📦 **Multiple Formats**: Supports GeoPackage (`.gpkg`) and GeoJSON (`.geojson`) files.
+- 📚 **Multi-Layer Reading**: Automatically extracts polygons/multipolygons (GPKG) or geometries (GeoJSON).
+- 🌍 **On-the-Fly Reprojection**: Automatic conversion to WGS84 (EPSG:4326) using `proj` for GPKG files.
+- 🎨 **Flexible Styling**: Fully configurable fill (RGBA) and stroke (RGB) colors.
+- 📐 **High Precision**: Customizable resolution in degrees per pixel or scale in meters per pixel.
+- 🏎️ **Rust Performance**: Parallelized rendering for optimal execution speed.
 
 ## 🚀 Installation
 
-### 📋 Prérequis
-- [Rust](https://www.rust-lang.org/tools/install) (édition 2021)
+### 📋 Prerequisites
+- [Rust](https://www.rust-lang.org/tools/install) (2021 edition)
 - Cargo
 
-### 🏗️ Compilation
+### 🏗️ Building from Source
 ```bash
 git clone https://github.com/AdrienGras/test-gpkg-to-png.git
 cd test-gpkg-to-png
 cargo build --release
 ```
-L'exécutable sera disponible dans `target/release/gpkg-to-png`.
+The executable will be available at `target/release/gpkg-to-png`.
 
-> 💡 **Tip** : Vous pouvez également télécharger les binaires pré-compilés pour Linux dans la section [Releases](https://github.com/AdrienGras/test-gpkg-to-png/releases) de ce dépôt.
+> 💡 **Tip**: You can also download pre-built binaries for Linux from the [Releases](https://github.com/AdrienGras/test-gpkg-to-png/releases) section of this repository.
 
-## 🛠️ Utilisation
+## 🛠️ Usage
 
 ```bash
 gpkg-to-png <INPUT> [OPTIONS]
 ```
 
-### ⚙️ Options principales
+### ⚙️ Main Options
 
-| Option           | Raccourci | Description                                                             | Défaut                    |
+| Option           | Shortcut | Description                                                             | Default                   |
 | :--------------- | :-------- | :---------------------------------------------------------------------- | :------------------------ |
-| `<INPUT>`        |           | **Argument** : Chemin vers le fichier `.gpkg` ou `.geojson`             |                           |
-| `--format`       | `-f`      | Format d'entrée: `gpkg` ou `geojson`                                    | **Requis**                |
-| `--verbose`      | `-v`      | Mode verbeux avec timestamps et logs colorés                            |                           |
-| `--quiet`        | `-q`      | Mode silencieux (affiche uniquement les chemins des fichiers générés)   |                           |
-| `--no-color`     |           | Désactive les couleurs ANSI (auto-détecté si non-TTY)                   |                           |
-| `--output-dir`   | `-o`      | Répertoire de sortie                                                    | `.`                       |
-| `--bbox`         | `-b`      | Bounding box: `minLon,minLat,maxLon,maxLat`                             | *Auto-détecté si omis*    |
-| `--resolution`   | `-r`      | Taille du pixel en degrés (mutuellement exclusif avec `--scale`)        |                           |
-| `--scale`        | `-s`      | Échelle en mètres par pixel (mutuellement exclusif avec `--resolution`) |                           |
-| `--fill`         |           | Couleur de remplissage RGBA hex (ex: `FF000080`)                        | `FF000080`                |
-| `--stroke`       |           | Couleur de contour RGB hex (ex: `FF0000`)                               | `FF0000`                  |
-| `--stroke-width` |           | Épaisseur du contour en pixels                                          | `1`                       |
-| `--layer`        | `-l`      | Nom de la couche spécifique à rendre (GPKG uniquement)                  | *Toutes*                  |
-| `--output-name`  |           | Nom du fichier PNG de sortie (GeoJSON uniquement)                       | *Nom du fichier d'entrée* |
-| `--help`         | `-h`      | Afficher l'aide                                                         |                           |
-| `--version`      | `-V`      | Afficher la version                                                     |                           |
+| `<INPUT>`        |           | **Argument**: Path to `.gpkg` or `.geojson` file                        |                           |
+| `--format`       | `-f`      | Input format: `gpkg` or `geojson`                                       | **Required**              |
+| `--verbose`      | `-v`      | Verbose mode with timestamps and colored logs                           |                           |
+| `--quiet`        | `-q`      | Quiet mode (only outputs file paths)                                    |                           |
+| `--no-color`     |           | Disable ANSI colors (auto-detected for non-TTY)                         |                           |
+| `--output-dir`   | `-o`      | Output directory                                                        | `.`                       |
+| `--bbox`         | `-b`      | Bounding box: `minLon,minLat,maxLon,maxLat`                             | *Auto-detected if omitted*|
+| `--resolution`   | `-r`      | Pixel size in degrees (mutually exclusive with `--scale`)               |                           |
+| `--scale`        | `-s`      | Scale in meters per pixel (mutually exclusive with `--resolution`)      |                           |
+| `--fill`         |           | Fill color RGBA hex (e.g., `FF000080`)                                  | `FF000080`                |
+| `--stroke`       |           | Stroke color RGB hex (e.g., `FF0000`)                                   | `FF0000`                  |
+| `--stroke-width` |           | Stroke width in pixels                                                  | `1`                       |
+| `--layer`        | `-l`      | Specific layer name to render (GPKG only)                               | *All*                     |
+| `--output-name`  |           | Output PNG filename (GeoJSON only)                                      | *Input filename*          |
+| `--help`         | `-h`      | Display help                                                            |                           |
+| `--version`      | `-V`      | Display version                                                         |                           |
 
-> **Note** : Vous devez spécifier soit `--resolution`, soit `--scale`. Si la `bbox` n'est pas fournie, l'outil l'auto-détectera à partir de l'emprise des données.
+> **Note**: You must specify either `--resolution` or `--scale`. If `bbox` is not provided, the tool will auto-detect it from the data extent.
 
-### 💡 Exemples
+### 💡 Examples
 
-**Rendu d'un GeoPackage avec couleurs personnalisées :**
+**Render a GeoPackage with custom colors:**
 ```bash
 gpkg-to-png zones.gpkg \
   -f gpkg \
@@ -77,25 +77,25 @@ gpkg-to-png zones.gpkg \
   -o ./output/
 ```
 
-**Rendu d'un GeoJSON avec résolution automatique :**
+**Render a GeoJSON with automatic resolution:**
 ```bash
 gpkg-to-png data.geojson \
   -f geojson \
   --scale 10 \
-  --output-name "mon-overlay" \
+  --output-name "my-overlay" \
   -o ./output/
 ```
 
-**Rendu d'une couche spécifique dans un GPKG :**
+**Render a specific layer in a GPKG:**
 ```bash
 gpkg-to-png zones.gpkg \
   -f gpkg \
-  --layer "parcelles" \
+  --layer "parcels" \
   --resolution 0.0001 \
   -o ./output/
 ```
 
-**Mode verbeux avec timestamps détaillés :**
+**Verbose mode with detailed timestamps:**
 ```bash
 gpkg-to-png zones.gpkg \
   -f gpkg \
@@ -107,67 +107,67 @@ gpkg-to-png zones.gpkg \
 #         ...
 ```
 
-**Mode silencieux (pour scripts) :**
+**Quiet mode (for scripts):**
 ```bash
 gpkg-to-png zones.gpkg -f gpkg -q --resolution 0.0001 -o ./output/
 # Output: ./output/zones.png
 ```
 
-## 🏗️ Architecture du projet
+## 🏗️ Project Architecture
 
 ```text
 src/
-├── main.rs       // 🏗️ Point d'entrée & dispatch par format
-├── cli.rs        // ⌨️ Parsing des arguments avec clap
-├── gpkg.rs       // 📂 Lecture GeoPackage & reprojection
-├── geojson.rs    // 🌐 Lecture GeoJSON (WGS84)
-├── render.rs     // 🎨 Algorithmes de rendu (Scanline/Bresenham)
+├── main.rs       // 🏗️ Entry point & format dispatch
+├── cli.rs        // ⌨️ Argument parsing with clap
+├── gpkg.rs       // 📂 GeoPackage reading & reprojection
+├── geojson.rs    // 🌐 GeoJSON reading (WGS84)
+├── render.rs     // 🎨 Rendering algorithms (Scanline/Bresenham)
 ├── render/
-│   └── edge.rs   // 📊 Gestion des tables de scanline
-├── math.rs       // 📐 Transformations de coordonnées
-└── error.rs      // 🚨 Gestion d'erreurs robuste
+│   └── edge.rs   // 📊 Scanline edge table management
+├── math.rs       // 📐 Coordinate transformations
+└── error.rs      // 🚨 Robust error handling
 ```
 
-## 🛠️ Dépendances
+## 🛠️ Dependencies
 
-Le projet utilise les meilleurs outils de l'écosystème Rust :
-- `sqlx` & `tokio` pour l'accès aux données asynchrone.
-- `geo` & `proj` pour la manipulation géospatiale.
-- `geojson` pour le parsing GeoJSON.
-- `image` pour le rendu raster haute performance.
-- `rayon` pour le parallélisme massif.
-- `atty` pour la détection TTY (couleurs automatiques).
+The project leverages the best tools in the Rust ecosystem:
+- `sqlx` & `tokio` for asynchronous data access.
+- `geo` & `proj` for geospatial manipulation.
+- `geojson` for GeoJSON parsing.
+- `image` for high-performance raster rendering.
+- `rayon` for massive parallelism.
+- `atty` for TTY detection (automatic colors).
 
-## 🧪 Tests
+## 🧪 Testing
 
 ```bash
-cargo test                 # ✅ Tests unitaires (48 tests)
-cargo test --test integration -- --ignored # 🔍 Tests d'intégration GPKG
-cargo test --test geojson_integration -- --ignored # 🌐 Tests d'intégration GeoJSON
+cargo test                 # ✅ Unit tests (48 tests)
+cargo test --test integration -- --ignored # 🔍 GPKG integration tests
+cargo test --test geojson_integration -- --ignored # 🌐 GeoJSON integration tests
 ```
 
 ---
 
-## 📜 Licence
+## 📜 License
 
 MIT © [Adrien Gras](https://github.com/AdrienGras)
 
 ---
 
-## 🧪 À propos de ce POC : La démarche "Vibe Coding"
+## 🧪 About this POC: The "Vibe Coding" Approach
 
-Ce projet n'est pas qu'un simple outil technique, c'est une **preuve de concept** explorant une nouvelle manière de concevoir du logiciel : le **Vibe Coding**.
+This project is more than just a technical tool—it's a **proof of concept** exploring a new way of building software: **Vibe Coding**.
 
-L'objectif était de tester la productivité et la pertinence d'une stack de développement 100% assistée par intelligence artificielle de bout en bout.
+The goal was to test the productivity and relevance of an end-to-end AI-assisted development stack.
 
-### 🛠️ Stack de développement utilisée :
-- **Orchestration & Exécution** : [Claude Code](https://claude.ai/code) (l'agent CLI qui a écrit ces lignes).
-- **Intelligence & "Vibes"** : Un mix dynamique via **OpenRouter**, exploitant principalement les modèles **Claude 4.5 Sonnet** (Anthropic) et **Gemini 3 Flash** (Google).
-- **Processus** : Aucun code n'a été écrit à la main. Chaque fonctionnalité, du choix de l'algorithme scanline pour le remplissage à la gestion du parallélisme avec `rayon`, a été proposée, discutée et implémentée par l'IA sous la supervision de l'utilisateur.
+### 🛠️ Development Stack Used:
+- **Orchestration & Execution**: [Claude Code](https://claude.ai/code) (the CLI agent that wrote these lines).
+- **Intelligence & "Vibes"**: A dynamic mix via **OpenRouter**, primarily using **Claude 4.5 Sonnet** (Anthropic) and **Gemini 3 Flash** (Google).
+- **Process**: No code was written by hand. Every feature, from choosing the scanline fill algorithm to managing parallelism with `rayon`, was proposed, discussed, and implemented by AI under user supervision.
 
-### 📊 Bilan de l'expérience :
-- ⏱️ **Temps total** : Environ **5 heures**, incluant la conception, l'implémentation, le débogage et la documentation.
-- 💰 **Coût** : Environ **60€** de tokens API (OpenRouter / Anthropic).
-- ✅ **Résultat** : Un code Rust robuste, typé, performant et entièrement documenté.
+### 📊 Experience Report:
+- ⏱️ **Total Time**: About **5 hours**, including design, implementation, debugging, and documentation.
+- 💰 **Cost**: About **€60** in API tokens (OpenRouter / Anthropic).
+- ✅ **Result**: Robust, typed, performant, and fully documented Rust code.
 
-*Ce projet démontre qu'avec les bons outils d'IA et une vision claire, on peut transformer une idée en un outil viable en un temps record.* 🚀
+*This project demonstrates that with the right AI tools and a clear vision, you can transform an idea into a viable tool in record time.* 🚀
