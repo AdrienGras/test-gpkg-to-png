@@ -310,7 +310,6 @@ async fn process_geojson(config: cli::Config) -> Result<()> {
     let geometries = reader.get_geometries();
 
     logger::info(&format!("Found {} polygon geometries", geometries.len()));
-    logger::debug(&format!("GeoJSON contains {} geometries", geometries.len()));
 
     // Determine bounding box
     let bbox = if let Some(bbox) = config.bbox {
@@ -340,9 +339,6 @@ async fn process_geojson(config: cli::Config) -> Result<()> {
         config.resolution.unwrap()
     };
 
-    logger::debug(&format!("Resolution: {:.10} degrees/pixel", resolution));
-    logger::debug(&format!("Bounding box: {:?}", bbox));
-
     // Create renderer
     let render_config = RenderConfig {
         bbox,
@@ -356,7 +352,6 @@ async fn process_geojson(config: cli::Config) -> Result<()> {
     let (width, height) = renderer.dimensions();
 
     logger::info(&format!("Rendering {}x{} image...", width, height));
-    logger::debug(&format!("Image dimensions: {}x{} pixels", width, height));
 
     // Only show progress bar in Normal and Verbose modes
     let show_progress = config.verbosity != VerbosityLevel::Quiet;
