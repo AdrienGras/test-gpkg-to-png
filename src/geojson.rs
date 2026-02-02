@@ -27,6 +27,10 @@ impl GeojsonReader {
             }
         })?;
 
+        // Fix CSV-style double-quote escaping (""type"" -> "type")
+        // This handles malformed GeoJSON exported from some tools
+        let content = content.replace("\"\"", "\"");
+
         let geojson: GeoJson = content.parse().map_err(|e| {
             GpkgError::GeojsonParseError(format!("{}", e))
         })?;

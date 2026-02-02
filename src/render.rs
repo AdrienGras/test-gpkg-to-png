@@ -133,8 +133,8 @@ impl Renderer {
                     if intersections.peek().is_some() {
                         let mut img = self.image.lock().unwrap();
                         while let (Some(e1), Some(e2)) = (intersections.next(), intersections.next()) {
-                            let x_start = (e1.x_current.round() as i32).max(0) as u32;
-                            let x_end = (e2.x_current.round() as i32).min(self.width as i32) as u32;
+                            let x_start = (e1.x_current.round() as i32).max(0).min(self.width as i32 - 1) as u32;
+                            let x_end = (e2.x_current.round() as i32).max(0).min(self.width as i32) as u32;
 
                             for x in x_start..x_end {
                                 blend_pixel(&mut img, x, y as u32, fill_color);
