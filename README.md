@@ -2,6 +2,7 @@
 
 [![Rust](https://img.shields.io/badge/rust-v1.70+-orange.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://github.com/AdrienGras/test-gpkg-to-png/actions/workflows/release.yml/badge.svg)](https://github.com/AdrienGras/test-gpkg-to-png/releases)
 [![Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blue.svg)](https://claude.ai/code)
 
 > Un outil CLI ultra-rapide en Rust pour transformer vos fichiers GeoPackage et GeoJSON en superbes overlays PNG transparents. 🚀
