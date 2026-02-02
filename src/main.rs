@@ -142,8 +142,8 @@ async fn process_gpkg(config: cli::Config) -> Result<()> {
     logger::debug(&format!("Resolution: {:.10} degrees/pixel", resolution));
     logger::debug(&format!("Bounding box: {:?}", bbox));
 
-    // Only show progress bars in Normal and Verbose modes
-    let show_progress = config.verbosity != VerbosityLevel::Quiet;
+    // Only show progress bars in Normal mode
+    let show_progress = config.verbosity == VerbosityLevel::Normal;
     let multi = MultiProgress::new();
     let main_pb = if show_progress {
         let pb = multi.add(ProgressBar::new(layers_to_process.len() as u64));
@@ -353,8 +353,8 @@ async fn process_geojson(config: cli::Config) -> Result<()> {
 
     logger::info(&format!("Rendering {}x{} image...", width, height));
 
-    // Only show progress bar in Normal and Verbose modes
-    let show_progress = config.verbosity != VerbosityLevel::Quiet;
+    // Only show progress bar in Normal mode
+    let show_progress = config.verbosity == VerbosityLevel::Normal;
     let pb = if show_progress {
         let pb = ProgressBar::new(geometries.len() as u64);
         pb.set_style(
