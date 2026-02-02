@@ -27,9 +27,7 @@ impl GeojsonReader {
             }
         })?;
 
-        // Fix CSV-style double-quote escaping (""type"" -> "type")
-        // This handles malformed GeoJSON exported from some tools
-        let content = content.replace("\"\"", "\"");
+        let content = preprocess_geojson(&content);
 
         let geojson: GeoJson = content.parse().map_err(|e| {
             GpkgError::GeojsonParseError(format!("{}", e))
@@ -85,6 +83,19 @@ impl GeojsonReader {
             Some(Bbox::new(min_lon, min_lat, max_lon, max_lat))
         }
     }
+}
+
+/// Pre-process GeoJSON content to fix common malformed patterns.
+fn preprocess_geojson(content: &str) -> String {
+    // Fix empty type field ("type":"" -> "type":"MultiPolygon")
+    // Handles malformed GeoJSON where type field is empty
+    // Must be done BEFORE CSV fix to avoid breaking the empty string
+    let content = content.replace(r#""type":"""#, r#""type":"MultiPolygon""#);
+    let content = content.replace(r#""type": """#, r#""type": "MultiPolygon""#);
+
+    // Fix CSV-style double-quote escaping (""type"" -> "type")
+    // This handles malformed GeoJSON exported from some tools
+    content.replace("\"\"", "\"")
 }
 
 /// Extract polygon geometries from GeoJSON.
@@ -226,6 +237,19 @@ mod tests {
         }"#;
 
         let geojson: GeoJson = json.parse().unwrap();
+        let geometries = extract_geometries(&geojson);
+        assert_eq!(geometries.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_empty_type_root_geometry() {
+        let json = r#"{
+            "type": "",
+            "coordinates": [[[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]]]
+        }"#;
+
+        let processed = preprocess_geojson(json);
+        let geojson: GeoJson = processed.parse().unwrap();
         let geometries = extract_geometries(&geojson);
         assert_eq!(geometries.len(), 1);
     }
