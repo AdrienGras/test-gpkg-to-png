@@ -45,6 +45,9 @@ gpkg-to-png <INPUT> [OPTIONS]
 | :--------------- | :-------- | :---------------------------------------------------------------------- | :------------------------ |
 | `<INPUT>`        |           | **Argument** : Chemin vers le fichier `.gpkg` ou `.geojson`             |                           |
 | `--format`       | `-f`      | Format d'entrée: `gpkg` ou `geojson`                                    | **Requis**                |
+| `--verbose`      | `-v`      | Mode verbeux avec timestamps et logs colorés                            |                           |
+| `--quiet`        | `-q`      | Mode silencieux (affiche uniquement les chemins des fichiers générés)   |                           |
+| `--no-color`     |           | Désactive les couleurs ANSI (auto-détecté si non-TTY)                   |                           |
 | `--output-dir`   | `-o`      | Répertoire de sortie                                                    | `.`                       |
 | `--bbox`         | `-b`      | Bounding box: `minLon,minLat,maxLon,maxLat`                             | *Auto-détecté si omis*    |
 | `--resolution`   | `-r`      | Taille du pixel en degrés (mutuellement exclusif avec `--scale`)        |                           |
@@ -91,6 +94,24 @@ gpkg-to-png zones.gpkg \
   -o ./output/
 ```
 
+**Mode verbeux avec timestamps détaillés :**
+```bash
+gpkg-to-png zones.gpkg \
+  -f gpkg \
+  -v \
+  --resolution 0.0001 \
+  -o ./output/
+# Output: [0.00s] [INFO] Auto-detecting bounding box...
+#         [0.02s] [DEBUG] Rendering geometry 1/100
+#         ...
+```
+
+**Mode silencieux (pour scripts) :**
+```bash
+gpkg-to-png zones.gpkg -f gpkg -q --resolution 0.0001 -o ./output/
+# Output: ./output/zones.png
+```
+
 ## 🏗️ Architecture du projet
 
 ```text
@@ -114,6 +135,7 @@ Le projet utilise les meilleurs outils de l'écosystème Rust :
 - `geojson` pour le parsing GeoJSON.
 - `image` pour le rendu raster haute performance.
 - `rayon` pour le parallélisme massif.
+- `atty` pour la détection TTY (couleurs automatiques).
 
 ## 🧪 Tests
 
